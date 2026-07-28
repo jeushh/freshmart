@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshMart — My Workspace</title>
+  <script src="tailwind.js"></script>
+  <script src="auth-guard.js"></script>
+  <script src="data-navigation.js" defer></script>
+  <style>
+    ::-webkit-scrollbar{width:7px;height:7px}::-webkit-scrollbar-track{background:#090d16}::-webkit-scrollbar-thumb{background:#334155;border-radius:8px}
+  </style>
+</head>
+<body class="min-h-screen bg-gray-950 font-sans text-slate-200">
+  <div id="employee-app" class="hidden">
+  <header class="border-b border-slate-800 bg-slate-900/90 px-5 py-4 shadow-xl sm:px-8">
+    <div class="mx-auto flex max-w-5xl items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">🙋</span>
+        <div>
+          <h1 class="text-lg font-bold text-white">FreshMart <span class="text-emerald-400">My Workspace</span></h1>
+          <p class="font-mono text-[11px] text-slate-500">EMPLOYEE SELF-SERVICE</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="employee-user-display" class="hidden items-center gap-1.5 font-mono text-xs text-slate-400 sm:flex">👤 <span id="employee-user-name"></span></span>
+        <button id="employee-logout-btn" type="button" class="rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300 transition hover:border-rose-700 hover:text-rose-400">Log Out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-5xl px-5 py-6 sm:px-8 space-y-6">
+
+    <section id="profile-card" class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <h2 class="text-xl font-semibold text-white">My Profile</h2>
+      </div>
+      <div id="profile-body" class="grid grid-cols-2 gap-4 px-5 py-5 sm:grid-cols-4">
+        <div class="col-span-2 sm:col-span-1">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-slate-500">Name</p>
+          <p id="profile-name" class="mt-1 font-medium text-white">—</p>
+        </div>
+        <div>
+          <p class="font-mono text-[10px] uppercase tracking-wider text-slate-500">Employee No.</p>
+          <p id="profile-empno" class="mt-1 font-mono text-slate-300">—</p>
+        </div>
+        <div>
+          <p class="font-mono text-[10px] uppercase tracking-wider text-slate-500">Position</p>
+          <p id="profile-position" class="mt-1 text-slate-300">—</p>
+        </div>
+        <div>
+          <p class="font-mono text-[10px] uppercase tracking-wider text-slate-500">Leave Balance</p>
+          <p id="profile-leave-balance" class="mt-1 font-mono font-bold text-emerald-400">—</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <h2 class="text-xl font-semibold text-white">My Attendance</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <input id="my-att-date-from" type="date" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          <input id="my-att-date-to" type="date" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          <button id="my-att-filter-btn" type="button" class="rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300 transition hover:border-emerald-500 hover:text-emerald-400">Filter</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-950 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-5 py-4">Date</th>
+              <th class="px-4 py-4">Time In</th>
+              <th class="px-4 py-4">Time Out</th>
+              <th class="px-4 py-4">Status</th>
+              <th class="px-5 py-4">Notes</th>
+            </tr>
+          </thead>
+          <tbody id="my-attendance-table" class="divide-y divide-slate-800">
+            <tr><td colspan="5" class="px-5 py-8 text-center font-mono text-slate-500">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <h2 class="text-xl font-semibold text-white">My HR Requests</h2>
+        <button id="new-my-hr-request-btn" type="button" class="rounded-lg bg-emerald-500 px-3 py-2 font-mono text-xs font-bold text-slate-950 transition hover:bg-emerald-400">+ New Request</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-950 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-5 py-4">Type</th>
+              <th class="px-4 py-4">Dates / Hours</th>
+              <th class="px-4 py-4">Reason</th>
+              <th class="px-4 py-4">Status</th>
+              <th class="px-5 py-4">Notes</th>
+            </tr>
+          </thead>
+          <tbody id="my-hr-requests-table" class="divide-y divide-slate-800">
+            <tr><td colspan="5" class="px-5 py-8 text-center font-mono text-slate-500">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <h2 class="text-xl font-semibold text-white">My Finance Requests</h2>
+        <button id="new-my-fin-request-btn" type="button" class="rounded-lg bg-emerald-500 px-3 py-2 font-mono text-xs font-bold text-slate-950 transition hover:bg-emerald-400">+ New Request</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-950 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-5 py-4">Type</th>
+              <th class="px-4 py-4 text-right">Amount</th>
+              <th class="px-4 py-4">Description</th>
+              <th class="px-4 py-4">Status</th>
+              <th class="px-5 py-4">Notes</th>
+            </tr>
+          </thead>
+          <tbody id="my-fin-requests-table" class="divide-y divide-slate-800">
+            <tr><td colspan="5" class="px-5 py-8 text-center font-mono text-slate-500">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+  </div>
+
+  <div id="my-hr-form-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+    <div class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+      <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+        <p class="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">My Workspace</p>
+        <h3 class="text-lg font-bold text-white">New HR Request</h3>
+      </div>
+      <div class="px-6 py-5 space-y-3">
+        <div>
+          <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Request Type</label>
+          <select id="my-hr-form-type" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            <option>Leave</option>
+            <option>Overtime</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div id="my-hr-form-dates-wrap" class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Start Date</label>
+            <input id="my-hr-form-start" type="date" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">End Date</label>
+            <input id="my-hr-form-end" type="date" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          </div>
+        </div>
+        <div id="my-hr-form-hours-wrap" class="hidden">
+          <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Hours</label>
+          <input id="my-hr-form-hours" type="number" min="0.5" step="0.5" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Reason</label>
+          <textarea id="my-hr-form-reason" rows="2" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"></textarea>
+        </div>
+        <p id="my-hr-form-error" class="hidden text-sm text-rose-400"></p>
+      </div>
+      <div class="flex gap-2 px-6 pb-6 border-t border-slate-800 pt-4">
+        <button id="my-hr-form-cancel" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Cancel</button>
+        <button id="my-hr-form-save" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition uppercase tracking-wider">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="my-fin-form-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+    <div class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+      <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+        <p class="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">My Workspace</p>
+        <h3 class="text-lg font-bold text-white">New Finance Request</h3>
+      </div>
+      <div class="px-6 py-5 space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Request Type</label>
+            <select id="my-fin-form-type" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+              <option>Reimbursement</option>
+              <option>Purchase</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Amount (₱)</label>
+            <input id="my-fin-form-amount" type="number" min="0.01" step="0.01" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Category <span class="normal-case text-slate-600">(optional)</span></label>
+          <input id="my-fin-form-category" type="text" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Description</label>
+          <textarea id="my-fin-form-description" rows="2" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"></textarea>
+        </div>
+        <p id="my-fin-form-error" class="hidden text-sm text-rose-400"></p>
+      </div>
+      <div class="flex gap-2 px-6 pb-6 border-t border-slate-800 pt-4">
+        <button id="my-fin-form-cancel" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Cancel</button>
+        <button id="my-fin-form-save" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition uppercase tracking-wider">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '../backend';
+    const FETCH_OPTS = { credentials: 'same-origin' };
+
+    function formatCurrency(amount) {
+      return '₱' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    const HR_STATUS_BADGE = {
+      'Pending':  'bg-amber-950 text-amber-400 border-amber-900/50',
+      'Approved': 'bg-emerald-950 text-emerald-400 border-emerald-900/50',
+      'Rejected': 'bg-rose-950 text-rose-400 border-rose-900/50',
+    };
+    const FIN_STATUS_BADGE = {
+      'Pending':  'bg-amber-950 text-amber-400 border-amber-900/50',
+      'Approved': 'bg-cyan-950 text-cyan-400 border-cyan-900/50',
+      'Rejected': 'bg-rose-950 text-rose-400 border-rose-900/50',
+      'Paid':     'bg-emerald-950 text-emerald-400 border-emerald-900/50',
+    };
+
+    function statusBadge(status, map) {
+      const span = document.createElement('span');
+      span.className = 'rounded px-2 py-0.5 text-[11px] font-bold border ' + (map[status] || 'bg-slate-800 text-slate-400 border-slate-700');
+      span.textContent = status;
+      return span;
+    }
+
+    // ── PROFILE ──────────────────────────────────────────────────────────────
+    async function loadProfile() {
+      try {
+        const response = await fetch(API_BASE + '/my_profile.php', FETCH_OPTS);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Failed to load profile.');
+        document.getElementById('profile-name').textContent = data.employee.full_name;
+        document.getElementById('profile-empno').textContent = data.employee.employee_no;
+        document.getElementById('profile-position').textContent = data.employee.position;
+        document.getElementById('profile-leave-balance').textContent = data.employee.leave_balance.toFixed(1) + ' days';
+      } catch (error) {
+        document.getElementById('profile-body').innerHTML =
+          '<p class="col-span-4 text-rose-400 text-sm">' + error.message + '</p>';
+      }
+    }
+
+    // ── MY ATTENDANCE ────────────────────────────────────────────────────────
+    const myAttTable = document.getElementById('my-attendance-table');
+
+    async function loadMyAttendance() {
+      const from = document.getElementById('my-att-date-from').value;
+      const to   = document.getElementById('my-att-date-to').value;
+      const params = new URLSearchParams();
+      if (from) params.set('date_from', from);
+      if (to) params.set('date_to', to);
+      try {
+        const response = await fetch(API_BASE + '/attendance.php?' + params.toString(), FETCH_OPTS);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Failed to load attendance.');
+        if (!from) document.getElementById('my-att-date-from').value = data.date_from;
+        if (!to) document.getElementById('my-att-date-to').value = data.date_to;
+        myAttTable.replaceChildren();
+        if (data.attendance.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 5; cell.className = 'px-5 py-8 text-center font-mono text-slate-500';
+          cell.textContent = 'No attendance records for this range.';
+          row.append(cell); myAttTable.append(row); return;
+        }
+        data.attendance.forEach(rec => {
+          const row = document.createElement('tr');
+          row.className = 'transition hover:bg-slate-800/50';
+          [
+            [rec.log_date, 'px-5 py-4 font-mono text-xs text-slate-400'],
+            [rec.time_in || '—', 'px-4 py-4 font-mono text-xs text-slate-400'],
+            [rec.time_out || '—', 'px-4 py-4 font-mono text-xs text-slate-400'],
+          ].forEach(([val, cls]) => {
+            const td = document.createElement('td'); td.className = cls; td.textContent = val; row.append(td);
+          });
+          const statusTd = document.createElement('td');
+          statusTd.className = 'px-4 py-4';
+          statusTd.append(statusBadge(rec.status, { 'Present': 'bg-emerald-950 text-emerald-400 border-emerald-900/50', 'Late': 'bg-amber-950 text-amber-400 border-amber-900/50', 'Absent': 'bg-rose-950 text-rose-400 border-rose-900/50', 'On Leave': 'bg-cyan-950 text-cyan-400 border-cyan-900/50' }));
+          row.append(statusTd);
+          const notesTd = document.createElement('td');
+          notesTd.className = 'px-5 py-4 text-slate-400'; notesTd.textContent = rec.notes || '—';
+          row.append(notesTd);
+          myAttTable.append(row);
+        });
+      } catch (error) {
+        myAttTable.replaceChildren();
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 5; cell.className = 'px-5 py-8 text-center text-rose-400';
+        cell.textContent = error.message;
+        row.append(cell); myAttTable.append(row);
+      }
+    }
+    document.getElementById('my-att-filter-btn').addEventListener('click', loadMyAttendance);
+
+    // ── MY HR REQUESTS ───────────────────────────────────────────────────────
+    const myHrTable = document.getElementById('my-hr-requests-table');
+    const myHrFormModal = document.getElementById('my-hr-form-modal');
+    const myHrFormType = document.getElementById('my-hr-form-type');
+    const myHrDatesWrap = document.getElementById('my-hr-form-dates-wrap');
+    const myHrHoursWrap = document.getElementById('my-hr-form-hours-wrap');
+
+    myHrFormType.addEventListener('change', () => {
+      const t = myHrFormType.value;
+      myHrDatesWrap.classList.toggle('hidden', t !== 'Leave');
+      myHrHoursWrap.classList.toggle('hidden', t !== 'Overtime');
+    });
+
+    document.getElementById('new-my-hr-request-btn').addEventListener('click', () => {
+      document.getElementById('my-hr-form-error').classList.add('hidden');
+      myHrFormType.value = 'Leave';
+      myHrDatesWrap.classList.remove('hidden');
+      myHrHoursWrap.classList.add('hidden');
+      document.getElementById('my-hr-form-start').value = '';
+      document.getElementById('my-hr-form-end').value = '';
+      document.getElementById('my-hr-form-hours').value = '';
+      document.getElementById('my-hr-form-reason').value = '';
+      myHrFormModal.classList.remove('hidden');
+    });
+    document.getElementById('my-hr-form-cancel').addEventListener('click', () => myHrFormModal.classList.add('hidden'));
+    myHrFormModal.addEventListener('click', e => { if (e.target === myHrFormModal) myHrFormModal.classList.add('hidden'); });
+
+    document.getElementById('my-hr-form-save').addEventListener('click', async () => {
+      const errEl = document.getElementById('my-hr-form-error');
+      errEl.classList.add('hidden');
+      const payload = {
+        request_type: myHrFormType.value,
+        reason: document.getElementById('my-hr-form-reason').value.trim(),
+        start_date: document.getElementById('my-hr-form-start').value,
+        end_date: document.getElementById('my-hr-form-end').value,
+        hours: document.getElementById('my-hr-form-hours').value,
+      };
+      try {
+        const response = await fetch(API_BASE + '/hr_request_submit.php', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload), credentials: 'same-origin',
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Submit failed.');
+        myHrFormModal.classList.add('hidden');
+        loadMyHrRequests();
+      } catch (error) {
+        errEl.textContent = error.message;
+        errEl.classList.remove('hidden');
+      }
+    });
+
+    async function loadMyHrRequests() {
+      try {
+        const response = await fetch(API_BASE + '/hr_requests.php', FETCH_OPTS);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Failed to load requests.');
+        myHrTable.replaceChildren();
+        if (data.requests.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 5; cell.className = 'px-5 py-8 text-center font-mono text-slate-500';
+          cell.textContent = 'No requests filed yet.';
+          row.append(cell); myHrTable.append(row); return;
+        }
+        data.requests.forEach(req => {
+          const row = document.createElement('tr');
+          row.className = 'transition hover:bg-slate-800/50';
+          const typeTd = document.createElement('td');
+          typeTd.className = 'px-5 py-4 text-slate-300'; typeTd.textContent = req.request_type;
+          const dateTd = document.createElement('td');
+          dateTd.className = 'px-4 py-4 font-mono text-xs text-slate-400';
+          dateTd.textContent = req.request_type === 'Leave' ? `${req.start_date || ''} → ${req.end_date || ''}`
+                              : req.request_type === 'Overtime' ? `${req.hours} hrs` : '—';
+          const reasonTd = document.createElement('td');
+          reasonTd.className = 'px-4 py-4 text-slate-400 max-w-xs truncate'; reasonTd.textContent = req.reason;
+          const statusTd = document.createElement('td');
+          statusTd.className = 'px-4 py-4'; statusTd.append(statusBadge(req.status, HR_STATUS_BADGE));
+          const notesTd = document.createElement('td');
+          notesTd.className = 'px-5 py-4 text-slate-500 text-xs'; notesTd.textContent = req.review_notes || '—';
+          row.append(typeTd, dateTd, reasonTd, statusTd, notesTd);
+          myHrTable.append(row);
+        });
+      } catch (error) {
+        myHrTable.replaceChildren();
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 5; cell.className = 'px-5 py-8 text-center text-rose-400';
+        cell.textContent = error.message;
+        row.append(cell); myHrTable.append(row);
+      }
+    }
+
+    // ── MY FINANCE REQUESTS ──────────────────────────────────────────────────
+    const myFinTable = document.getElementById('my-fin-requests-table');
+    const myFinFormModal = document.getElementById('my-fin-form-modal');
+
+    document.getElementById('new-my-fin-request-btn').addEventListener('click', () => {
+      document.getElementById('my-fin-form-error').classList.add('hidden');
+      document.getElementById('my-fin-form-type').value = 'Reimbursement';
+      document.getElementById('my-fin-form-amount').value = '';
+      document.getElementById('my-fin-form-category').value = '';
+      document.getElementById('my-fin-form-description').value = '';
+      myFinFormModal.classList.remove('hidden');
+    });
+    document.getElementById('my-fin-form-cancel').addEventListener('click', () => myFinFormModal.classList.add('hidden'));
+    myFinFormModal.addEventListener('click', e => { if (e.target === myFinFormModal) myFinFormModal.classList.add('hidden'); });
+
+    document.getElementById('my-fin-form-save').addEventListener('click', async () => {
+      const errEl = document.getElementById('my-fin-form-error');
+      errEl.classList.add('hidden');
+      const payload = {
+        request_type: document.getElementById('my-fin-form-type').value,
+        amount: document.getElementById('my-fin-form-amount').value,
+        category: document.getElementById('my-fin-form-category').value.trim(),
+        description: document.getElementById('my-fin-form-description').value.trim(),
+      };
+      try {
+        const response = await fetch(API_BASE + '/finance_request_submit.php', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload), credentials: 'same-origin',
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Submit failed.');
+        myFinFormModal.classList.add('hidden');
+        loadMyFinanceRequests();
+      } catch (error) {
+        errEl.textContent = error.message;
+        errEl.classList.remove('hidden');
+      }
+    });
+
+    async function loadMyFinanceRequests() {
+      try {
+        const response = await fetch(API_BASE + '/finance_requests.php', FETCH_OPTS);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Failed to load requests.');
+        myFinTable.replaceChildren();
+        if (data.requests.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 5; cell.className = 'px-5 py-8 text-center font-mono text-slate-500';
+          cell.textContent = 'No requests filed yet.';
+          row.append(cell); myFinTable.append(row); return;
+        }
+        data.requests.forEach(req => {
+          const row = document.createElement('tr');
+          row.className = 'transition hover:bg-slate-800/50';
+          const typeTd = document.createElement('td');
+          typeTd.className = 'px-5 py-4 text-slate-300'; typeTd.textContent = req.request_type;
+          const amtTd = document.createElement('td');
+          amtTd.className = 'px-4 py-4 text-right font-mono text-slate-200'; amtTd.textContent = formatCurrency(req.amount);
+          const descTd = document.createElement('td');
+          descTd.className = 'px-4 py-4 text-slate-400 max-w-xs truncate'; descTd.textContent = req.description;
+          const statusTd = document.createElement('td');
+          statusTd.className = 'px-4 py-4'; statusTd.append(statusBadge(req.status, FIN_STATUS_BADGE));
+          const notesTd = document.createElement('td');
+          notesTd.className = 'px-5 py-4 text-slate-500 text-xs'; notesTd.textContent = req.review_notes || '—';
+          row.append(typeTd, amtTd, descTd, statusTd, notesTd);
+          myFinTable.append(row);
+        });
+      } catch (error) {
+        myFinTable.replaceChildren();
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 5; cell.className = 'px-5 py-8 text-center text-rose-400';
+        cell.textContent = error.message;
+        row.append(cell); myFinTable.append(row);
+      }
+    }
+
+    // ── BOOTSTRAP ────────────────────────────────────────────────────────────
+    (async () => {
+      const session = await guardPage(['employee.self']);
+      if (!session) return;
+
+      const userDisplay = document.getElementById('employee-user-display');
+      const userNameEl  = document.getElementById('employee-user-name');
+      if (userDisplay && userNameEl) {
+        userNameEl.textContent = session.full_name || session.username;
+        userDisplay.classList.remove('hidden');
+      }
+      document.getElementById('employee-logout-btn').addEventListener('click', logoutAndRedirect);
+      document.getElementById('employee-app').classList.remove('hidden');
+
+      loadProfile();
+      loadMyAttendance();
+      loadMyHrRequests();
+      loadMyFinanceRequests();
+    })();
+  </script>
+</body>
+</html>

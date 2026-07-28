@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshMart — HR Management</title>
+  <script src="tailwind.js"></script>
+  <script src="auth-guard.js"></script>
+  <script src="data-navigation.js" defer></script>
+  <style>
+    ::-webkit-scrollbar{width:7px;height:7px}::-webkit-scrollbar-track{background:#090d16}::-webkit-scrollbar-thumb{background:#334155;border-radius:8px}
+  </style>
+</head>
+<body class="min-h-screen bg-gray-950 font-sans text-slate-200">
+  <div id="hr-app" class="hidden">
+  <header class="sticky top-0 z-40 border-b border-slate-800 bg-slate-900/95 px-5 py-4 shadow-xl backdrop-blur sm:px-8">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">🧑‍💼</span>
+        <div>
+          <h1 class="text-lg font-bold text-white">FreshMart <span class="text-emerald-400">HR Management</span></h1>
+          <p class="font-mono text-[11px] text-slate-500">HR DASHBOARD</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="hr-user-display" class="hidden items-center gap-1.5 font-mono text-xs text-slate-400 sm:flex">👤 <span id="hr-user-name"></span></span>
+        <button id="hr-logout-btn" type="button" class="rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300 transition hover:border-rose-700 hover:text-rose-400">Log Out</button>
+      </div>
+    </div>
+  </header>
+
+  <nav aria-label="HR section navigation" class="sticky top-[73px] z-30 border-b border-slate-800 bg-gray-950/95 px-5 py-3 backdrop-blur sm:px-8">
+    <div class="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto pb-1">
+      <a href="#employees-section" class="shrink-0 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400">Employees</a>
+      <a href="#attendance-section" class="shrink-0 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400">Attendance</a>
+      <a href="#hr-requests-section" class="shrink-0 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400">HR Requests</a>
+      <a href="#payroll-section" class="shrink-0 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400">Payroll</a>
+      <span class="ml-auto shrink-0 text-xs text-slate-500">Use the section bar instead of scrolling through every record.</span>
+    </div>
+  </nav>
+
+  <main class="mx-auto max-w-7xl px-5 py-6 sm:px-8">
+
+    <section id="employees-section" class="scroll-mt-32 hidden overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <div>
+          <h2 class="text-xl font-semibold text-white">Employees</h2>
+          <p class="mt-1 text-sm text-slate-500">HR employee directory.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input id="employee-search" type="text" placeholder="Search name or ID…"
+                 class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none w-48">
+          <button id="add-employee-btn" type="button" class="hidden rounded-lg bg-emerald-500 px-3 py-2 font-mono text-xs font-bold text-slate-950 transition hover:bg-emerald-400">+ Add Employee</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-950 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-5 py-4">Emp No</th>
+              <th class="px-4 py-4">Full Name</th>
+              <th class="px-4 py-4">Position</th>
+              <th class="px-4 py-4">Department</th>
+              <th class="px-4 py-4">Hire Date</th>
+              <th class="px-4 py-4 text-right">Leave Bal.</th>
+              <th class="px-4 py-4">Status</th>
+              <th class="px-5 py-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="employees-table" class="divide-y divide-slate-800">
+            <tr><td colspan="7" class="px-5 py-8 text-center font-mono text-slate-500">Loading employees…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div id="employee-form-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+      <div class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+        <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+          <p class="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">HR Management</p>
+          <h3 id="emp-form-title" class="text-lg font-bold text-white">Add Employee</h3>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-3">
+          <input type="hidden" id="emp-form-id">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Full Name</label>
+              <input id="emp-form-name" type="text" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Employee No <span class="normal-case text-slate-600">(auto if blank)</span></label>
+              <input id="emp-form-empno" type="text" placeholder="EMP-0001" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Position</label>
+              <input id="emp-form-position" type="text" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Department</label>
+              <input id="emp-form-dept" type="text" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Hire Date</label>
+              <input id="emp-form-hiredate" type="date" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Status</label>
+              <select id="emp-form-status" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+                <option>Active</option>
+                <option>On Leave</option>
+                <option>Terminated</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Email</label>
+              <input id="emp-form-email" type="email" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Phone</label>
+              <input id="emp-form-phone" type="text" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Pay Type</label>
+            <select id="emp-form-pay-type" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"><option>Monthly</option><option>Hourly</option></select>
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Basic Monthly Salary</label>
+            <input id="emp-form-basic-salary" type="number" min="0" step="0.01" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Hourly Rate</label>
+            <input id="emp-form-hourly-rate" type="number" min="0" step="0.01" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Remaining Leave Days</label>
+              <input id="emp-form-leave-balance" type="number" min="0" step="0.5" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+          </div>
+          <p id="emp-form-error" class="hidden text-sm text-rose-400"></p>
+        </div>
+        <div class="shrink-0 flex gap-2 px-6 pb-6 border-t border-slate-800 pt-4">
+          <button id="emp-form-cancel" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Cancel</button>
+          <button id="emp-form-save" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition uppercase tracking-wider">Save Employee</button>
+        </div>
+      </div>
+    </div>
+
+    <section id="attendance-section" class="scroll-mt-32 mt-6 hidden overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <div>
+          <h2 class="text-xl font-semibold text-white">Attendance</h2>
+          <p class="mt-1 text-sm text-slate-500">Daily attendance log — defaults to the current week.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="att-employee-filter" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"></select>
+          <input id="att-date-from" type="date" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          <input id="att-date-to" type="date" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          <button id="att-filter-btn" type="button" class="rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300 transition hover:border-emerald-500 hover:text-emerald-400">Filter</button>
+          <button id="add-attendance-btn" type="button" class="hidden rounded-lg bg-emerald-500 px-3 py-2 font-mono text-xs font-bold text-slate-950 transition hover:bg-emerald-400">+ Log Entry</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-950 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-5 py-4">Date</th>
+              <th class="px-4 py-4">Employee</th>
+              <th class="px-4 py-4">Time In</th>
+              <th class="px-4 py-4">Time Out</th>
+              <th class="px-4 py-4">Status</th>
+              <th class="px-4 py-4">Notes</th>
+              <th class="px-5 py-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="attendance-table" class="divide-y divide-slate-800">
+            <tr><td colspan="7" class="px-5 py-8 text-center font-mono text-slate-500">Loading attendance…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div id="attendance-form-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+      <div class="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+          <p class="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">HR Management</p>
+          <h3 class="text-lg font-bold text-white">Log Attendance</h3>
+        </div>
+        <div class="px-6 py-5 space-y-3">
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Employee</label>
+            <select id="att-form-employee" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"></select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Date</label>
+              <input id="att-form-date" type="date" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Status</label>
+              <select id="att-form-status" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+                <option>Present</option>
+                <option>Late</option>
+                <option>Absent</option>
+                <option>On Leave</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Time In</label>
+              <input id="att-form-timein" type="time" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Time Out</label>
+              <input id="att-form-timeout" type="time" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Notes</label>
+            <textarea id="att-form-notes" rows="2" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"></textarea>
+          </div>
+          <p id="att-form-error" class="hidden text-sm text-rose-400"></p>
+        </div>
+        <div class="flex gap-2 px-6 pb-6 border-t border-slate-800 pt-4">
+          <button id="att-form-cancel" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Cancel</button>
+          <button id="att-form-save" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition uppercase tracking-wider">Save Entry</button>
+        </div>
+      </div>
+    </div>
+
+    <section id="hr-requests-section" class="scroll-mt-32 mt-6 hidden overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <div>
+          <h2 class="text-xl font-semibold text-white">HR Requests</h2>
+          <p class="mt-1 text-sm text-slate-500">Leave, overtime, and other employee requests.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="hr-status-filter" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            <option value="">All Statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+          <button id="new-request-btn" type="button" class="hidden rounded-lg bg-emerald-500 px-3 py-2 font-mono text-xs font-bold text-slate-950 transition hover:bg-emerald-400">+ New Request</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-950 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-5 py-4">Employee</th>
+              <th class="px-4 py-4">Type</th>
+              <th class="px-4 py-4">Dates / Hours</th>
+              <th class="px-4 py-4">Reason</th>
+              <th class="px-4 py-4">Status</th>
+              <th class="px-4 py-4">Reviewed By</th>
+              <th class="px-5 py-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="hr-requests-table" class="divide-y divide-slate-800">
+            <tr><td colspan="7" class="px-5 py-8 text-center font-mono text-slate-500">Loading requests…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div id="hr-request-form-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+      <div class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+          <p class="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">HR Management</p>
+          <h3 class="text-lg font-bold text-white">New HR Request</h3>
+        </div>
+        <div class="px-6 py-5 space-y-3">
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Employee</label>
+            <select id="hr-form-employee" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"></select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Request Type</label>
+              <select id="hr-form-type" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+                <option>Leave</option>
+                <option>Overtime</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div id="hr-form-hours-wrap" class="hidden">
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Hours</label>
+              <input id="hr-form-hours" type="number" min="0.5" step="0.5" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+          </div>
+          <div id="hr-form-dates-wrap" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Start Date</label>
+              <input id="hr-form-start" type="date" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">End Date</label>
+              <input id="hr-form-end" type="date" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Reason</label>
+            <textarea id="hr-form-reason" rows="2" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"></textarea>
+          </div>
+          <p id="hr-form-error" class="hidden text-sm text-rose-400"></p>
+        </div>
+        <div class="flex gap-2 px-6 pb-6 border-t border-slate-800 pt-4">
+          <button id="hr-form-cancel" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Cancel</button>
+          <button id="hr-form-save" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition uppercase tracking-wider">Submit Request</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="review-notes-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+      <div class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+          <p class="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">HR Review</p>
+          <h3 id="review-modal-title" class="text-lg font-bold text-white">Approve Request</h3>
+        </div>
+        <div class="px-6 py-5 space-y-3">
+          <input type="hidden" id="review-request-id">
+          <input type="hidden" id="review-decision">
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Notes <span class="normal-case text-slate-600">(optional)</span></label>
+            <textarea id="review-notes-input" rows="3" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"></textarea>
+          </div>
+          <p id="review-modal-error" class="hidden text-sm text-rose-400"></p>
+        </div>
+        <div class="flex gap-2 px-6 pb-6 border-t border-slate-800 pt-4">
+          <button id="review-modal-cancel" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Cancel</button>
+          <button id="review-modal-confirm" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition uppercase tracking-wider">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <section id="payroll-section" class="scroll-mt-32 mt-6 hidden overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <div>
+          <h2 class="text-xl font-semibold text-white">Payroll</h2>
+          <p class="mt-1 text-sm text-slate-500">Pay periods, approvals, and payment history.</p>
+        </div>
+        <button id="add-payroll-btn" class="rounded-lg bg-emerald-500 px-3 py-2 font-mono text-xs font-bold text-slate-950 hover:bg-emerald-400">+ New Pay Run</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-950 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-4">Employee</th><th class="px-4 py-4">Period</th>
+              <th class="px-4 py-4 text-right">Net Pay</th><th class="px-4 py-4">Status</th><th class="px-4 py-4"></th>
+            </tr>
+          </thead>
+          <tbody id="payroll-body" class="divide-y divide-slate-800"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mt-6 overflow-hidden rounded-xl border border-slate-800 bg-[#090d16] shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-3">
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-xs font-semibold tracking-wider text-emerald-400">›_ EVENT LOGGER</span>
+          <span id="log-count" class="rounded-full bg-slate-800 border border-slate-700 px-2 py-0.5 font-mono text-[10px] text-slate-400">0 entries</span>
+        </div>
+        <button id="clear-log" class="rounded-lg border border-slate-700 px-3 py-1 font-mono text-[10px] text-slate-400 hover:bg-slate-800 hover:text-white transition">Clear</button>
+      </div>
+      <div id="event-log" class="max-h-48 overflow-y-auto px-4 py-3 space-y-1.5 font-mono text-[11px]"></div>
+    </section>
+
+  </main>
+  </div>
+
+  <!-- New Pay Run Modal -->
+  <div id="payroll-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6">
+      <h3 class="mb-4 text-lg font-semibold text-white">New Pay Run</h3>
+      <form id="payroll-form" class="grid grid-cols-2 gap-3">
+        <label class="col-span-2 text-xs text-slate-400">Employee
+          <select required id="pr-employee" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></select>
+        </label>
+        <label class="text-xs text-slate-400">Period Start<input required type="date" id="pr-start" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Period End<input required type="date" id="pr-end" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="col-span-2 text-xs text-slate-400">Payroll Frequency<select id="pr-frequency" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option>Weekly</option><option>Biweekly</option><option selected>Semi-monthly</option><option>Monthly</option></select></label>
+        <div class="col-span-2 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-xs text-slate-400"><div>Pay Type: <span id="pr-pay-type" class="font-semibold text-white">—</span></div><div class="mt-1">Estimated Net Pay: <span id="pr-estimate" class="font-mono font-semibold text-emerald-400">₱0.00</span></div></div>
+        <div id="pr-compensation-warning" class="col-span-2 hidden rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">This employee has no compensation rate. Open Employees → Edit and save a Basic Monthly Salary or Hourly Rate before creating payroll.</div>
+        <div class="col-span-2 flex items-center justify-between gap-3 rounded-lg border border-cyan-900/50 bg-cyan-950/20 px-3 py-2 text-xs text-slate-400"><span id="pr-calculation-note">Select an employee and payroll frequency.</span><button type="button" id="pr-load-attendance" class="shrink-0 rounded border border-cyan-700 px-2 py-1 text-cyan-300 hover:bg-cyan-950">Load Attendance Hours</button></div>
+        <label class="text-xs text-slate-400">Basic Salary<input type="number" min="0" step="0.01" value="0" id="pr-basic" readonly class="mt-1 w-full cursor-not-allowed rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white opacity-70"></label>
+        <label class="text-xs text-slate-400">Hourly Rate<input type="number" min="0" step="0.01" value="0" id="pr-rate" readonly class="mt-1 w-full cursor-not-allowed rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white opacity-70"></label>
+        <label class="text-xs text-slate-400">Regular Hours<input type="number" min="0" step="0.5" value="0" id="pr-reghours" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Overtime Hours<input type="number" min="0" step="0.5" value="0" id="pr-othours" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Allowances<input type="number" min="0" step="0.01" value="0" id="pr-allow" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Bonuses<input type="number" min="0" step="0.01" value="0" id="pr-bonus" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="col-span-2 text-xs text-slate-400">Deductions<input type="number" min="0" step="0.01" value="0" id="pr-deduct" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <p id="payroll-form-error" class="col-span-2 hidden text-xs text-rose-400"></p>
+        <div class="col-span-2 mt-2 flex justify-end gap-2">
+          <button type="button" class="payroll-modal-cancel rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+          <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Save Draft</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const PR_API_BASE = '../backend';
+    const PR_FETCH_OPTS = { credentials: 'same-origin' };
+    function prEscape(v) { return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    function prCurrency(v) { return '₱' + Number(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    document.querySelectorAll('.payroll-modal-cancel').forEach(btn => btn.addEventListener('click', () => {
+      document.getElementById('payroll-modal').classList.add('hidden'); document.getElementById('payroll-modal').classList.remove('flex');
+    }));
+
+    async function initPayroll() {
+      document.getElementById('payroll-section').classList.remove('hidden');
+      const empSelect = document.getElementById('pr-employee');
+      window.payrollEmployeeRates = {};
+      try {
+        const r = await fetch(PR_API_BASE + '/employees.php', PR_FETCH_OPTS);
+        const payload = await r.json();
+        const employees = Array.isArray(payload) ? payload : payload.employees;
+        if (Array.isArray(employees)) {
+          window.payrollEmployeeRates = Object.fromEntries(employees.map(e => [String(e.id), e]));
+          empSelect.innerHTML = employees.map(e => `<option value="${e.id}">${prEscape(e.full_name)} (${prEscape(e.employee_no)})</option>`).join('');
+          applyPayrollEmployeeRate();
+        }
+      } catch (e) { /* non-fatal */ }
+      loadPayroll();
+    }
+
+    const PAYROLL_STATUS_COLORS = { Draft: 'bg-slate-800 text-slate-400', 'Pending Approval': 'bg-amber-950 text-amber-400', Approved: 'bg-cyan-950 text-cyan-400', Paid: 'bg-emerald-950 text-emerald-400' };
+    async function loadPayroll() {
+      try {
+        const r = await fetch(PR_API_BASE + '/payroll.php', PR_FETCH_OPTS);
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load payroll.');
+        const body = document.getElementById('payroll-body');
+        body.innerHTML = payload.payroll.length ? payload.payroll.map(p => `
+          <tr><td class="px-4 py-3 text-white">${prEscape(p.full_name)}</td>
+          <td class="px-4 py-3 font-mono text-xs text-slate-400">${prEscape(p.pay_period_start)} → ${prEscape(p.pay_period_end)}</td>
+          <td class="px-4 py-3 text-right font-mono text-emerald-400">${prCurrency(p.net_pay)}</td>
+          <td class="px-4 py-3"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${PAYROLL_STATUS_COLORS[p.status]||'bg-slate-800 text-slate-400'}">${p.status}</span></td>
+          <td class="px-4 py-3 text-right">${prPayrollActions(p)}</td></tr>`).join('')
+          : '<tr><td colspan="5" class="px-4 py-6 text-center text-slate-500">No payroll records yet.</td></tr>';
+        body.querySelectorAll('[data-pr-action]').forEach(btn => btn.addEventListener('click', () => prAction(Number(btn.dataset.id), btn.dataset.prAction)));
+        log('SYSTEM', 'Payroll synchronized: ' + payload.payroll.length + ' record(s).');
+      } catch (e) { log('ERROR', e.message); }
+    }
+    function prPayrollActions(p) {
+      if (Number(p.net_pay || 0) <= 0 && p.status !== 'Paid') return `<span class="rounded border border-amber-700 px-2 py-1 text-xs text-amber-400" title="Configure the employee salary/rate and create a corrected pay run.">Needs correction</span>`;
+      if (p.status === 'Draft') return `<button data-pr-action="submit" data-id="${p.id}" class="rounded bg-cyan-600 px-2 py-1 text-xs text-white">Submit</button>`;
+      if (p.status === 'Pending Approval') return `<button data-pr-action="approve" data-id="${p.id}" class="mr-1 rounded bg-emerald-600 px-2 py-1 text-xs text-white">Approve</button><button data-pr-action="reject" data-id="${p.id}" class="rounded border border-rose-700 px-2 py-1 text-xs text-rose-400">Reject</button>`;
+      if (p.status === 'Approved') return `<button data-pr-action="pay" data-id="${p.id}" class="rounded bg-amber-600 px-2 py-1 text-xs text-white">Mark Paid</button>`;
+      return '';
+    }
+    async function prAction(id, action) {
+      try {
+        const endpoint = action === 'pay' ? '/payroll_pay.php' : '/payroll_review.php';
+        const body = action === 'pay' ? { id } : { id, action };
+        const r = await fetch(PR_API_BASE + endpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to update payroll.');
+        log('SUCCESS', 'Payroll #' + id + ' -> ' + (payload.status || action));
+        loadPayroll();
+      } catch (e) { log('ERROR', e.message); }
+    }
+    function updatePayrollPeriodEnd() {
+      const startInput = document.getElementById('pr-start');
+      const endInput = document.getElementById('pr-end');
+      if (!startInput.value) return;
+      const start = new Date(startInput.value + 'T00:00:00');
+      const frequency = document.getElementById('pr-frequency').value;
+      const end = new Date(start);
+      if (frequency === 'Weekly') end.setDate(end.getDate() + 6);
+      else if (frequency === 'Biweekly') end.setDate(end.getDate() + 13);
+      else if (frequency === 'Semi-monthly') {
+        if (start.getDate() <= 15) end.setDate(15);
+        else end.setMonth(end.getMonth() + 1, 0);
+      } else end.setMonth(end.getMonth() + 1, 0);
+      endInput.value = end.toISOString().slice(0, 10);
+    }
+
+    function calculatePayrollEstimate() {
+      const selected = (window.payrollEmployeeRates || {})[String(document.getElementById('pr-employee').value)];
+      if (!selected) return 0;
+      const frequency = document.getElementById('pr-frequency').value;
+      const factor = { Weekly: 12/52, Biweekly: 12/26, 'Semi-monthly': 0.5, Monthly: 1 }[frequency] || 0.5;
+      const regularHours = Number(document.getElementById('pr-reghours').value || 0);
+      const overtimeHours = Number(document.getElementById('pr-othours').value || 0);
+      const hourlyRate = Number(selected.hourly_rate || 0);
+      const base = (selected.pay_type || 'Monthly') === 'Hourly'
+        ? regularHours * hourlyRate
+        : Number(selected.basic_salary || 0) * factor;
+      return base + (overtimeHours * hourlyRate * 1.25)
+        + Number(document.getElementById('pr-allow').value || 0)
+        + Number(document.getElementById('pr-bonus').value || 0)
+        - Number(document.getElementById('pr-deduct').value || 0);
+    }
+    function refreshPayrollEstimate() {
+      document.getElementById('pr-estimate').textContent = prCurrency(calculatePayrollEstimate());
+      const selected = (window.payrollEmployeeRates || {})[String(document.getElementById('pr-employee').value)];
+      const frequency = document.getElementById('pr-frequency').value;
+      const note = document.getElementById('pr-calculation-note');
+      if (!selected) note.textContent = 'Select an employee and payroll frequency.';
+      else if ((selected.pay_type || 'Monthly') === 'Hourly') note.textContent = `Hourly: regular hours × ${prCurrency(selected.hourly_rate)}; overtime uses 1.25× rate.`;
+      else note.textContent = `${frequency}: monthly salary is prorated for this pay run; overtime uses the saved hourly rate.`;
+    }
+    function applyPayrollEmployeeRate() {
+      const selected = (window.payrollEmployeeRates || {})[String(document.getElementById('pr-employee').value)];
+      const basic = selected ? Number(selected.basic_salary || 0) : 0;
+      const rate = selected ? Number(selected.hourly_rate || 0) : 0;
+      const payType = selected ? (selected.pay_type || 'Monthly') : '—';
+      document.getElementById('pr-basic').value = basic.toFixed(2);
+      document.getElementById('pr-rate').value = rate.toFixed(2);
+      document.getElementById('pr-pay-type').textContent = payType;
+      const invalid = !selected || (payType === 'Monthly' ? basic <= 0 : rate <= 0);
+      document.getElementById('pr-compensation-warning').classList.toggle('hidden', !invalid);
+      const saveButton = document.querySelector('#payroll-form button[type="submit"]');
+      if (saveButton) {
+        saveButton.disabled = invalid;
+        saveButton.classList.toggle('opacity-50', invalid);
+        saveButton.classList.toggle('cursor-not-allowed', invalid);
+      }
+      refreshPayrollEstimate();
+    }
+    document.getElementById('pr-employee').addEventListener('change', applyPayrollEmployeeRate);
+    document.getElementById('pr-frequency').addEventListener('change', () => { updatePayrollPeriodEnd(); refreshPayrollEstimate(); });
+    document.getElementById('pr-start').addEventListener('change', updatePayrollPeriodEnd);
+    async function loadPayrollAttendanceHours() {
+      const employeeId = document.getElementById('pr-employee').value;
+      const start = document.getElementById('pr-start').value;
+      const end = document.getElementById('pr-end').value;
+      const errEl = document.getElementById('payroll-form-error');
+      errEl.classList.add('hidden');
+      if (!employeeId || !start || !end) {
+        errEl.textContent = 'Select an employee and pay-period dates before loading attendance.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      try {
+        const params = new URLSearchParams({ employee_id: employeeId, date_from: start, date_to: end });
+        const r = await fetch(PR_API_BASE + '/attendance.php?' + params.toString(), PR_FETCH_OPTS);
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load attendance.');
+        let regular = 0, overtime = 0;
+        (payload.attendance || []).forEach(row => {
+          if (!row.time_in || !row.time_out || !['Present','Late'].includes(row.status)) return;
+          const [ih, im] = row.time_in.split(':').map(Number);
+          const [oh, om] = row.time_out.split(':').map(Number);
+          let hours = ((oh * 60 + om) - (ih * 60 + im)) / 60;
+          if (hours < 0) hours += 24;
+          hours = Math.max(0, hours);
+          regular += Math.min(8, hours);
+          overtime += Math.max(0, hours - 8);
+        });
+        document.getElementById('pr-reghours').value = regular.toFixed(2);
+        document.getElementById('pr-othours').value = overtime.toFixed(2);
+        refreshPayrollEstimate();
+        const selectedName = document.getElementById('pr-employee').selectedOptions[0]?.textContent || 'employee';
+        if (!(payload.attendance || []).length) {
+          errEl.textContent = `No attendance records were found for ${selectedName} from ${start} to ${end}. You may enter hours manually after verifying attendance.`;
+          errEl.classList.remove('hidden');
+          log('WARN', errEl.textContent);
+        } else {
+          log('SUCCESS', `Attendance hours loaded: ${regular.toFixed(2)} regular, ${overtime.toFixed(2)} overtime.`);
+        }
+      } catch (e) {
+        errEl.textContent = e.message;
+        errEl.classList.remove('hidden');
+      }
+    }
+    document.getElementById('pr-load-attendance').addEventListener('click', loadPayrollAttendanceHours);
+
+    ['pr-frequency','pr-reghours','pr-othours','pr-allow','pr-bonus','pr-deduct'].forEach(id => document.getElementById(id).addEventListener('input', refreshPayrollEstimate));
+
+    document.getElementById('add-payroll-btn').addEventListener('click', () => {
+      document.getElementById('payroll-form').reset();
+      ['pr-reghours','pr-othours','pr-allow','pr-bonus','pr-deduct'].forEach(id => document.getElementById(id).value = 0);
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById('pr-start').value = today;
+      updatePayrollPeriodEnd();
+      applyPayrollEmployeeRate();
+      document.getElementById('payroll-form-error').classList.add('hidden');
+      document.getElementById('payroll-modal').classList.remove('hidden'); document.getElementById('payroll-modal').classList.add('flex');
+    });
+    document.getElementById('payroll-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const errEl = document.getElementById('payroll-form-error');
+      errEl.classList.add('hidden');
+      const body = {
+        employee_id: document.getElementById('pr-employee').value,
+        pay_period_start: document.getElementById('pr-start').value,
+        pay_period_end: document.getElementById('pr-end').value,
+        pay_frequency: document.getElementById('pr-frequency').value,
+        basic_salary: document.getElementById('pr-basic').value,
+        hourly_rate: document.getElementById('pr-rate').value,
+        regular_hours: document.getElementById('pr-reghours').value,
+        overtime_hours: document.getElementById('pr-othours').value,
+        allowances: document.getElementById('pr-allow').value,
+        bonuses: document.getElementById('pr-bonus').value,
+        deductions: document.getElementById('pr-deduct').value,
+      };
+      try {
+        const r = await fetch(PR_API_BASE + '/payroll_save.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to save payroll draft.');
+        document.getElementById('payroll-modal').classList.add('hidden'); document.getElementById('payroll-modal').classList.remove('flex');
+        log('SUCCESS', 'Payroll draft saved — net pay ' + prCurrency(payload.net_pay) + '.');
+        loadPayroll();
+      } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+    });
+  </script>
+
+  <script>
+    const API_BASE = '../backend';
+    const FETCH_OPTS = { credentials: 'same-origin' };
+    const eventLog = document.getElementById('event-log');
+    let sessionPermissions = [];
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function log(type, message) {
+      const line = document.createElement('div');
+      line.className = 'flex items-center gap-2';
+      const stamp = new Date().toLocaleTimeString('en-US', { hour12: true });
+
+      const timeNode = document.createElement('span');
+      timeNode.className = 'shrink-0 text-slate-600 text-[10px]';
+      timeNode.textContent = stamp;
+
+      const badgeColors = {
+        SUCCESS: 'bg-emerald-950 text-emerald-400 border-emerald-900/50',
+        ERROR:   'bg-rose-950 text-rose-400 border-rose-900/50',
+        SYSTEM:  'bg-cyan-950 text-cyan-400 border-cyan-900/50',
+      };
+      const badgeClass = badgeColors[type] || 'bg-slate-800 text-slate-400 border-slate-700';
+
+      const typeNode = document.createElement('span');
+      typeNode.className = 'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold border ' + badgeClass;
+      typeNode.textContent = type;
+
+      const msgNode = document.createElement('span');
+      msgNode.className = 'text-slate-300';
+      msgNode.textContent = message;
+
+      line.append(timeNode, typeNode, msgNode);
+      eventLog.append(line);
+      eventLog.scrollTop = eventLog.scrollHeight;
+
+      const countEl = document.getElementById('log-count');
+      if (countEl) countEl.textContent = eventLog.children.length + ' entries';
+    }
+
+    document.getElementById('clear-log').addEventListener('click', () => {
+      eventLog.replaceChildren();
+      document.getElementById('log-count').textContent = '0 entries';
+    });
+
+    // ── EMPLOYEES ────────────────────────────────────────────────────────────
+    const empTable       = document.getElementById('employees-table');
+    const empFormModal   = document.getElementById('employee-form-modal');
+    const empFormTitle   = document.getElementById('emp-form-title');
+    const empFormId      = document.getElementById('emp-form-id');
+    const empFormName    = document.getElementById('emp-form-name');
+    const empFormEmpNo   = document.getElementById('emp-form-empno');
+    const empFormPos     = document.getElementById('emp-form-position');
+    const empFormDept    = document.getElementById('emp-form-dept');
+    const empFormHire    = document.getElementById('emp-form-hiredate');
+    const empFormStatus  = document.getElementById('emp-form-status');
+    const empFormEmail   = document.getElementById('emp-form-email');
+    const empFormPhone   = document.getElementById('emp-form-phone');
+    const empFormLeaveBal = document.getElementById('emp-form-leave-balance');
+    const empFormPayType = document.getElementById('emp-form-pay-type');
+    const empFormBasicSalary = document.getElementById('emp-form-basic-salary');
+    const empFormHourlyRate = document.getElementById('emp-form-hourly-rate');
+    const empFormError   = document.getElementById('emp-form-error');
+
+    const STATUS_BADGE = {
+      'Active':     'bg-emerald-950 text-emerald-400 border-emerald-900/50',
+      'On Leave':   'bg-amber-950 text-amber-400 border-amber-900/50',
+      'Terminated': 'bg-rose-950 text-rose-400 border-rose-900/50',
+    };
+
+    function openEmpForm(emp = null) {
+      empFormTitle.textContent = emp ? 'Edit Employee' : 'Add Employee';
+      empFormId.value       = emp ? emp.id : '';
+      empFormName.value     = emp ? emp.full_name : '';
+      empFormEmpNo.value    = emp ? emp.employee_no : '';
+      empFormPos.value      = emp ? emp.position : '';
+      empFormDept.value     = emp ? emp.department : '';
+      empFormHire.value     = emp ? emp.hire_date : '';
+      empFormStatus.value   = emp ? emp.employment_status : 'Active';
+      empFormEmail.value    = emp ? (emp.email || '') : '';
+      empFormPhone.value    = emp ? (emp.phone || '') : '';
+      empFormLeaveBal.value = emp ? emp.leave_balance : 15;
+      empFormPayType.value = emp ? (emp.pay_type || 'Monthly') : 'Monthly';
+      empFormBasicSalary.value = emp ? Number(emp.basic_salary || 0) : 0;
+      empFormHourlyRate.value = emp ? Number(emp.hourly_rate || 0) : 0;
+      empFormError.classList.add('hidden');
+      empFormModal.classList.remove('hidden');
+    }
+
+    function closeEmpForm() { empFormModal.classList.add('hidden'); }
+
+    document.getElementById('add-employee-btn').addEventListener('click', () => openEmpForm());
+    document.getElementById('emp-form-cancel').addEventListener('click', closeEmpForm);
+    empFormModal.addEventListener('click', e => { if (e.target === empFormModal) closeEmpForm(); });
+
+    document.getElementById('emp-form-save').addEventListener('click', async () => {
+      empFormError.classList.add('hidden');
+      const payload = {
+        full_name: empFormName.value.trim(),
+        employee_no: empFormEmpNo.value.trim(),
+        position: empFormPos.value.trim(),
+        department: empFormDept.value.trim(),
+        hire_date: empFormHire.value,
+        employment_status: empFormStatus.value,
+        email: empFormEmail.value.trim(),
+        phone: empFormPhone.value.trim(),
+        leave_balance: empFormLeaveBal.value,
+        pay_type: empFormPayType.value,
+        basic_salary: empFormBasicSalary.value,
+        hourly_rate: empFormHourlyRate.value,
+      };
+      if (empFormId.value) payload.id = empFormId.value;
+      try {
+        const response = await fetch(API_BASE + '/employee_save.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          credentials: 'same-origin',
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Save failed.');
+        closeEmpForm();
+        loadEmployees();
+        populateEmployeeDropdowns();
+        log('SUCCESS', (payload.id ? 'Updated' : 'Added') + ' employee: ' + payload.full_name);
+      } catch (error) {
+        empFormError.textContent = error.message;
+        empFormError.classList.remove('hidden');
+      }
+    });
+
+    let empSearchTimer = null;
+    document.getElementById('employee-search').addEventListener('input', (e) => {
+      clearTimeout(empSearchTimer);
+      empSearchTimer = setTimeout(() => loadEmployees(e.target.value.trim()), 300);
+    });
+
+    async function loadEmployees(search = '') {
+      try {
+        const url = API_BASE + '/employees.php' + (search ? '?search=' + encodeURIComponent(search) : '');
+        const response = await fetch(url, FETCH_OPTS);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Failed to load employees.');
+        empTable.replaceChildren();
+        if (data.employees.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 8; cell.className = 'px-5 py-8 text-center font-mono text-slate-500';
+          cell.textContent = search ? 'No employees match your search.' : 'No employees on record.';
+          row.append(cell); empTable.append(row);
+          return;
+        }
+        const canEdit = sessionPermissions.includes('hr.employees.edit');
+        data.employees.forEach(emp => {
+          const row = document.createElement('tr');
+          row.className = 'transition hover:bg-slate-800/50';
+          [
+            [emp.employee_no, 'px-5 py-4 font-mono text-xs text-slate-500'],
+            [emp.full_name,   'px-4 py-4 font-medium text-white'],
+            [emp.position,    'px-4 py-4 text-slate-300'],
+            [emp.department,  'px-4 py-4 text-slate-400'],
+            [emp.hire_date,   'px-4 py-4 font-mono text-xs text-slate-400'],
+          ].forEach(([val, cls]) => {
+            const td = document.createElement('td');
+            td.className = cls; td.textContent = val; row.append(td);
+          });
+          const leaveBalTd = document.createElement('td');
+          leaveBalTd.className = 'px-4 py-4 text-right font-mono text-slate-300';
+          leaveBalTd.textContent = Number(emp.leave_balance).toFixed(1) + ' d';
+          row.append(leaveBalTd);
+          const statusTd = document.createElement('td');
+          statusTd.className = 'px-4 py-4';
+          const badge = document.createElement('span');
+          badge.className = 'rounded px-2 py-0.5 text-[11px] font-bold border ' + (STATUS_BADGE[emp.employment_status] || 'bg-slate-800 text-slate-400 border-slate-700');
+          badge.textContent = emp.employment_status;
+          statusTd.append(badge); row.append(statusTd);
+          const actionTd = document.createElement('td');
+          actionTd.className = 'px-5 py-4 text-right';
+          if (canEdit) {
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button'; editBtn.textContent = 'Edit';
+            editBtn.className = 'rounded-lg border border-slate-700 px-3 py-1.5 font-mono text-xs text-slate-300 transition hover:border-emerald-500 hover:text-emerald-400';
+            editBtn.addEventListener('click', () => openEmpForm(emp));
+            actionTd.append(editBtn);
+          }
+          row.append(actionTd);
+          empTable.append(row);
+        });
+        log('SYSTEM', 'Employees loaded: ' + data.employees.length + ' record(s).');
+      } catch (error) {
+        log('ERROR', error.message);
+      }
+    }
+
+    // ── ATTENDANCE ───────────────────────────────────────────────────────────
+    const attTable          = document.getElementById('attendance-table');
+    const attEmployeeFilter = document.getElementById('att-employee-filter');
+    const attDateFrom       = document.getElementById('att-date-from');
+    const attDateTo         = document.getElementById('att-date-to');
+    const attFormModal      = document.getElementById('attendance-form-modal');
+    const attFormEmployee   = document.getElementById('att-form-employee');
+    const attFormDate       = document.getElementById('att-form-date');
+    const attFormStatus     = document.getElementById('att-form-status');
+    const attFormTimeIn     = document.getElementById('att-form-timein');
+    const attFormTimeOut    = document.getElementById('att-form-timeout');
+    const attFormNotes      = document.getElementById('att-form-notes');
+    const attFormError      = document.getElementById('att-form-error');
+
+    const ATT_STATUS_BADGE = {
+      'Present':  'bg-emerald-950 text-emerald-400 border-emerald-900/50',
+      'Late':     'bg-amber-950 text-amber-400 border-amber-900/50',
+      'Absent':   'bg-rose-950 text-rose-400 border-rose-900/50',
+      'On Leave': 'bg-cyan-950 text-cyan-400 border-cyan-900/50',
+    };
+
+    async function populateEmployeeDropdowns() {
+      try {
+        const r = await fetch(API_BASE + '/employees.php', FETCH_OPTS);
+        const d = await r.json();
+        const employees = d.employees || [];
+
+        attEmployeeFilter.replaceChildren();
+        const allOpt = document.createElement('option');
+        allOpt.value = ''; allOpt.textContent = 'All Employees';
+        attEmployeeFilter.append(allOpt);
+
+        [attEmployeeFilter, attFormEmployee, hrFormEmployee].forEach(select => {
+          if (select === attEmployeeFilter) return; // already handled above
+          select.replaceChildren();
+        });
+
+        employees.forEach(e => {
+          const label = e.employee_no + ' — ' + e.full_name;
+          [attEmployeeFilter, attFormEmployee, hrFormEmployee].forEach(select => {
+            const opt = document.createElement('option');
+            opt.value = e.id;
+            opt.textContent = label;
+            select.append(opt);
+          });
+        });
+      } catch (_) {}
+    }
+
+    function openAttForm(rec = null) {
+      attFormError.classList.add('hidden');
+      attFormEmployee.value = rec ? rec.employee_id : (attFormEmployee.options[0] ? attFormEmployee.options[0].value : '');
+      attFormDate.value     = rec ? rec.log_date : new Date().toISOString().slice(0, 10);
+      attFormStatus.value   = rec ? rec.status : 'Present';
+      attFormTimeIn.value   = rec ? (rec.time_in || '') : '';
+      attFormTimeOut.value  = rec ? (rec.time_out || '') : '';
+      attFormNotes.value    = rec ? (rec.notes || '') : '';
+      attFormModal.classList.remove('hidden');
+    }
+    function closeAttForm() { attFormModal.classList.add('hidden'); }
+
+    document.getElementById('add-attendance-btn').addEventListener('click', () => openAttForm());
+    document.getElementById('att-form-cancel').addEventListener('click', closeAttForm);
+    attFormModal.addEventListener('click', e => { if (e.target === attFormModal) closeAttForm(); });
+
+    document.getElementById('att-form-save').addEventListener('click', async () => {
+      attFormError.classList.add('hidden');
+      const body = new URLSearchParams({
+        employee_id: attFormEmployee.value,
+        log_date:    attFormDate.value,
+        time_in:     attFormTimeIn.value,
+        time_out:    attFormTimeOut.value,
+        status:      attFormStatus.value,
+        notes:       attFormNotes.value.trim(),
+      });
+      try {
+        const response = await fetch(API_BASE + '/attendance_save.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+          credentials: 'same-origin',
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Save failed.');
+        closeAttForm();
+        loadAttendance();
+        log('SUCCESS', result.message || 'Attendance saved.');
+      } catch (error) {
+        attFormError.textContent = error.message;
+        attFormError.classList.remove('hidden');
+      }
+    });
+
+    document.getElementById('att-filter-btn').addEventListener('click', () => loadAttendance());
+
+    async function loadAttendance() {
+      const params = new URLSearchParams();
+      if (attEmployeeFilter.value) params.set('employee_id', attEmployeeFilter.value);
+      if (attDateFrom.value) params.set('date_from', attDateFrom.value);
+      if (attDateTo.value) params.set('date_to', attDateTo.value);
+      try {
+        const response = await fetch(API_BASE + '/attendance.php?' + params.toString(), FETCH_OPTS);
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Failed to load attendance.');
+        if (!attDateFrom.value) attDateFrom.value = data.date_from;
+        if (!attDateTo.value) attDateTo.value = data.date_to;
+        attTable.replaceChildren();
+        if (data.attendance.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 7; cell.className = 'px-5 py-8 text-center font-mono text-slate-500';
+          cell.textContent = 'No attendance records for this range.';
+          row.append(cell); attTable.append(row); return;
+        }
+        const canEdit = sessionPermissions.includes('hr.attendance.edit');
+        data.attendance.forEach(rec => {
+          const row = document.createElement('tr');
+          row.className = 'transition hover:bg-slate-800/50';
+          [
+            [rec.log_date, 'px-5 py-4 font-mono text-xs text-slate-400'],
+            [(rec.employee_name || '—') + ' (' + (rec.employee_no || '—') + ')', 'px-4 py-4 text-slate-300'],
+            [rec.time_in || 'Not recorded', 'px-4 py-4 font-mono text-xs text-slate-400'],
+            [rec.time_out || (rec.time_in ? 'Not clocked out' : 'Not recorded'), 'px-4 py-4 font-mono text-xs text-slate-400'],
+          ].forEach(([val, cls]) => {
+            const td = document.createElement('td'); td.className = cls; td.textContent = val; row.append(td);
+          });
+          const statusTd = document.createElement('td');
+          statusTd.className = 'px-4 py-4';
+          const badge = document.createElement('span');
+          badge.className = 'rounded px-2 py-0.5 text-[11px] font-bold border ' + (ATT_STATUS_BADGE[rec.status] || 'bg-slate-800 text-slate-400 border-slate-700');
+          badge.textContent = rec.status;
+          statusTd.append(badge); row.append(statusTd);
+
+          const notesTd = document.createElement('td');
+          notesTd.className = 'px-4 py-4 text-slate-400 max-w-xs truncate';
+          notesTd.textContent = rec.notes || '—';
+          row.append(notesTd);
+
+          const actionTd = document.createElement('td');
+          actionTd.className = 'px-5 py-4 text-right';
+          if (canEdit) {
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button'; editBtn.textContent = 'Edit';
+            editBtn.className = 'rounded-lg border border-slate-700 px-3 py-1.5 font-mono text-xs text-slate-300 transition hover:border-emerald-500 hover:text-emerald-400';
+            editBtn.addEventListener('click', () => openAttForm(rec));
+            actionTd.append(editBtn);
+          }
+          row.append(actionTd);
+          attTable.append(row);
+        });
+        log('SYSTEM', 'Attendance loaded: ' + data.attendance.length + ' record(s).');
+      } catch (error) {
+        log('ERROR', error.message);
+      }
+    }
+
+    // ── HR REQUESTS ──────────────────────────────────────────────────────────
+    const hrTable         = document.getElementById('hr-requests-table');
+    const hrFormModal     = document.getElementById('hr-request-form-modal');
+    const hrFormEmployee  = document.getElementById('hr-form-employee');
+    const hrFormType      = document.getElementById('hr-form-type');
+    const hrFormHoursWrap = document.getElementById('hr-form-hours-wrap');
+    const hrFormDatesWrap = document.getElementById('hr-form-dates-wrap');
+    const hrFormHours     = document.getElementById('hr-form-hours');
+    const hrFormStart     = document.getElementById('hr-form-start');
+    const hrFormEnd       = document.getElementById('hr-form-end');
+    const hrFormReason    = document.getElementById('hr-form-reason');
+    const hrFormError     = document.getElementById('hr-form-error');
+    const reviewModal     = document.getElementById('review-notes-modal');
+    const reviewTitle     = document.getElementById('review-modal-title');
+    const reviewReqId     = document.getElementById('review-request-id');
+    const reviewDecision  = document.getElementById('review-decision');
+    const reviewNotes     = document.getElementById('review-notes-input');
+    const reviewError     = document.getElementById('review-modal-error');
+
+    const HR_STATUS_BADGE = {
+      'Pending':  'bg-amber-950 text-amber-400 border-amber-900/50',
+      'Approved': 'bg-emerald-950 text-emerald-400 border-emerald-900/50',
+      'Rejected': 'bg-rose-950 text-rose-400 border-rose-900/50',
+    };
+
+    hrFormType.addEventListener('change', () => {
+      const t = hrFormType.value;
+      hrFormDatesWrap.classList.toggle('hidden', t !== 'Leave');
+      hrFormHoursWrap.classList.toggle('hidden', t !== 'Overtime');
+    });
+
+    function openHrForm() {
+      hrFormError.classList.add('hidden');
+      hrFormType.value = 'Leave';
+      hrFormDatesWrap.classList.remove('hidden');
+      hrFormHoursWrap.classList.add('hidden');
+      hrFormStart.value = ''; hrFormEnd.value = '';
+      hrFormHours.value = ''; hrFormReason.value = '';
+      hrFormModal.classList.remove('hidden');
+    }
+
+    function closeHrForm() { hrFormModal.classList.add('hidden'); }
+
+    document.getElementById('new-request-btn').addEventListener('click', openHrForm);
+    document.getElementById('hr-form-cancel').addEventListener('click', closeHrForm);
+    hrFormModal.addEventListener('click', e => { if (e.target === hrFormModal) closeHrForm(); });
+
+    document.getElementById('hr-form-save').addEventListener('click', async () => {
+      hrFormError.classList.add('hidden');
+      const payload = {
+        employee_id:  hrFormEmployee.value,
+        request_type: hrFormType.value,
+        reason:       hrFormReason.value.trim(),
+        start_date:   hrFormStart.value,
+        end_date:     hrFormEnd.value,
+        hours:        hrFormHours.value,
+      };
+      try {
+        const response = await fetch(API_BASE + '/hr_request_submit.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          credentials: 'same-origin',
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Submit failed.');
+        closeHrForm();
+        loadHrRequests();
+        log('SUCCESS', 'HR request submitted (ID ' + result.id + ').');
+      } catch (error) {
+        hrFormError.textContent = error.message;
+        hrFormError.classList.remove('hidden');
+      }
+    });
+
+    document.getElementById('hr-status-filter').addEventListener('change', () => loadHrRequests());
+
+    function openReviewModal(requestId, decision) {
+      reviewReqId.value    = requestId;
+      reviewDecision.value = decision;
+      reviewTitle.textContent = decision === 'Approved' ? 'Approve Request' : 'Reject Request';
+      const confirmBtn = document.getElementById('review-modal-confirm');
+      confirmBtn.className = confirmBtn.className.replace(/bg-\S+|hover:bg-\S+/g, '').trim();
+      confirmBtn.classList.add(
+        ...(decision === 'Approved'
+          ? ['bg-emerald-500', 'hover:bg-emerald-400', 'text-slate-950']
+          : ['bg-rose-500',    'hover:bg-rose-400',    'text-white'])
+      );
+      reviewNotes.value = '';
+      reviewError.classList.add('hidden');
+      reviewModal.classList.remove('hidden');
+    }
+
+    function closeReviewModal() { reviewModal.classList.add('hidden'); }
+
+    document.getElementById('review-modal-cancel').addEventListener('click', closeReviewModal);
+    reviewModal.addEventListener('click', e => { if (e.target === reviewModal) closeReviewModal(); });
+
+    document.getElementById('review-modal-confirm').addEventListener('click', async () => {
+      reviewError.classList.add('hidden');
+      try {
+        const response = await fetch(API_BASE + '/hr_request_review.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            request_id:   parseInt(reviewReqId.value),
+            decision:     reviewDecision.value,
+            review_notes: reviewNotes.value.trim(),
+          }),
+          credentials: 'same-origin',
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Review failed.');
+        closeReviewModal();
+        loadHrRequests();
+        log('SUCCESS', 'Request #' + reviewReqId.value + ' ' + reviewDecision.value.toLowerCase() + '.');
+      } catch (error) {
+        reviewError.textContent = error.message;
+        reviewError.classList.remove('hidden');
+      }
+    });
+
+    async function loadHrRequests() {
+      const status = document.getElementById('hr-status-filter').value;
+      const url    = API_BASE + '/hr_requests.php' + (status ? '?status=' + encodeURIComponent(status) : '');
+      try {
+        const response = await fetch(url, FETCH_OPTS);
+        const data     = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Failed to load HR requests.');
+        hrTable.replaceChildren();
+        if (data.requests.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 7; cell.className = 'px-5 py-8 text-center font-mono text-slate-500';
+          cell.textContent = 'No requests found.';
+          row.append(cell); hrTable.append(row); return;
+        }
+        const canApprove = sessionPermissions.includes('hr.requests.approve');
+        data.requests.forEach(req => {
+          const row = document.createElement('tr');
+          row.className = 'transition hover:bg-slate-800/50';
+
+          const empTd = document.createElement('td');
+          empTd.className = 'px-5 py-4';
+          const nameSpan = document.createElement('div');
+          nameSpan.className = 'font-medium text-white'; nameSpan.textContent = req.employee_name || '—';
+          const noSpan = document.createElement('div');
+          noSpan.className = 'font-mono text-[10px] text-slate-500'; noSpan.textContent = req.employee_no || '';
+          empTd.append(nameSpan, noSpan);
+
+          const typeTd = document.createElement('td');
+          typeTd.className = 'px-4 py-4 text-slate-300'; typeTd.textContent = req.request_type;
+
+          const dateTd = document.createElement('td');
+          dateTd.className = 'px-4 py-4 font-mono text-xs text-slate-400';
+          if (req.request_type === 'Leave') {
+            dateTd.textContent = (req.start_date || '') + ' → ' + (req.end_date || '');
+          } else if (req.request_type === 'Overtime') {
+            dateTd.textContent = req.hours + ' hrs';
+          } else {
+            dateTd.textContent = '—';
+          }
+
+          const reasonTd = document.createElement('td');
+          reasonTd.className = 'px-4 py-4 text-slate-400 max-w-xs truncate'; reasonTd.textContent = req.reason;
+
+          const statusTd = document.createElement('td');
+          statusTd.className = 'px-4 py-4';
+          const badge = document.createElement('span');
+          badge.className = 'rounded px-2 py-0.5 text-[11px] font-bold border ' + (HR_STATUS_BADGE[req.status] || 'bg-slate-800 text-slate-400 border-slate-700');
+          badge.textContent = req.status;
+          statusTd.append(badge);
+
+          const reviewerTd = document.createElement('td');
+          reviewerTd.className = 'px-4 py-4 text-xs text-slate-500';
+          reviewerTd.textContent = req.reviewer_name || '—';
+
+          const actionTd = document.createElement('td');
+          actionTd.className = 'px-5 py-4 text-right';
+          if (canApprove && req.status === 'Pending') {
+            const wrap = document.createElement('div');
+            wrap.className = 'flex justify-end gap-2';
+            const approveBtn = document.createElement('button');
+            approveBtn.type = 'button'; approveBtn.textContent = 'Approve';
+            approveBtn.className = 'rounded-lg border border-emerald-700 px-3 py-1.5 font-mono text-xs text-emerald-400 transition hover:bg-emerald-950';
+            approveBtn.addEventListener('click', () => openReviewModal(req.id, 'Approved'));
+            const rejectBtn = document.createElement('button');
+            rejectBtn.type = 'button'; rejectBtn.textContent = 'Reject';
+            rejectBtn.className = 'rounded-lg border border-rose-800 px-3 py-1.5 font-mono text-xs text-rose-400 transition hover:bg-rose-950';
+            rejectBtn.addEventListener('click', () => openReviewModal(req.id, 'Rejected'));
+            wrap.append(approveBtn, rejectBtn); actionTd.append(wrap);
+          }
+
+          row.append(empTd, typeTd, dateTd, reasonTd, statusTd, reviewerTd, actionTd);
+          hrTable.append(row);
+        });
+        log('SYSTEM', 'HR requests loaded: ' + data.requests.length + ' record(s).');
+      } catch (error) {
+        log('ERROR', error.message);
+      }
+    }
+
+    // ── BOOTSTRAP ────────────────────────────────────────────────────────────
+    (async () => {
+      const session = await guardPage(['hr.employees.view', 'hr.attendance.view', 'hr.requests.view', 'payroll.manage']);
+      if (!session) return; // guardPage() already redirected away
+
+      sessionPermissions = session.permissions || [];
+      const userDisplay = document.getElementById('hr-user-display');
+      const userNameEl  = document.getElementById('hr-user-name');
+      if (userDisplay && userNameEl) {
+        userNameEl.textContent = session.full_name || session.username;
+        userDisplay.classList.remove('hidden');
+      }
+      document.getElementById('hr-logout-btn').addEventListener('click', logoutAndRedirect);
+
+      document.getElementById('hr-app').classList.remove('hidden');
+
+      await populateEmployeeDropdowns();
+
+      if (sessionPermissions.includes('hr.employees.view')) {
+        document.getElementById('employees-section').classList.remove('hidden');
+        if (sessionPermissions.includes('hr.employees.edit')) {
+          document.getElementById('add-employee-btn').classList.remove('hidden');
+        }
+        loadEmployees();
+      }
+      if (sessionPermissions.includes('hr.attendance.view')) {
+        document.getElementById('attendance-section').classList.remove('hidden');
+        if (sessionPermissions.includes('hr.attendance.edit')) {
+          document.getElementById('add-attendance-btn').classList.remove('hidden');
+        }
+        loadAttendance();
+      }
+      if (sessionPermissions.includes('hr.requests.view')) {
+        document.getElementById('hr-requests-section').classList.remove('hidden');
+        // Employees submit leave/overtime requests from Employee Self-Service.
+        // HR managers review and approve them here, but do not create requests
+        // on behalf of employees from the management dashboard.
+        document.getElementById('new-request-btn').classList.add('hidden');
+        loadHrRequests();
+      }
+      if (sessionPermissions.includes('payroll.manage')) {
+        initPayroll();
+      }
+    })();
+  </script>
+</body>
+</html>

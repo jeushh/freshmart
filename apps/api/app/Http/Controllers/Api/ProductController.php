@@ -1,0 +1,4 @@
+<?php
+namespace App\Http\Controllers\Api;
+use App\Http\Controllers\Controller; use App\Models\Product; use Illuminate\Http\Request;
+class ProductController extends Controller {public function index(Request $r){$q=Product::query();if($s=$r->string('search')->trim())$q->where(fn($x)=>$x->where('name','like',"%$s%")->orWhere('sku','like',"%$s%"));return $q->orderBy('name')->paginate($r->integer('per_page',20));}public function store(Request $r){return response()->json(Product::create($this->v($r)),201);}public function update(Request $r,Product $product){$product->update($this->v($r));return $product;}private function v($r){return $r->validate(['sku'=>'required|string|max:60','name'=>'required|string|max:150','category'=>'nullable|string|max:80','price'=>'required|numeric|min:0','cost'=>'required|numeric|min:0','stock'=>'required|integer|min:0','reorder_level'=>'required|integer|min:0','emoji'=>'nullable|string|max:16','status'=>'required|in:active,inactive']);}}

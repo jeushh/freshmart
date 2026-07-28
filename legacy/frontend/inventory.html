@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshMart — Inventory &amp; Restock</title>
+  <script src="tailwind.js"></script>
+  <script src="auth-guard.js"></script>
+  <script src="data-navigation.js" defer></script>
+  <style>
+    ::-webkit-scrollbar{width:7px;height:7px}::-webkit-scrollbar-track{background:#090d16}::-webkit-scrollbar-thumb{background:#334155;border-radius:8px}
+    .tab-btn.active { background:#065f46; color:#fff; border-color:#10b981; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-950 font-sans text-slate-200">
+  <div id="inv-app" class="hidden">
+  <header class="border-b border-slate-800 bg-slate-900/90 px-5 py-4 shadow-xl sm:px-8">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📦</span>
+        <div>
+          <h1 class="text-lg font-bold text-white">FreshMart <span class="text-amber-400">Inventory &amp; Restock</span></h1>
+          <p class="font-mono text-[11px] text-slate-500">POS SALE → LOW STOCK → RESTOCK REQUEST → APPROVAL → PURCHASE ORDER → RECEIVING → FINANCE</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="user-display" class="hidden items-center gap-1.5 font-mono text-xs text-slate-400 sm:flex">👤 <span id="user-name"></span></span>
+        <a id="inventory-admin-link" href="admin.html" class="hidden rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300 transition hover:border-emerald-500 hover:text-emerald-400">← Admin</a>
+        <button id="logout-btn" type="button" class="rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300 transition hover:border-rose-700 hover:text-rose-400">Log Out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl p-5 sm:p-8">
+    <!-- TABS -->
+    <div class="sticky top-0 z-30 -mx-5 mb-5 flex flex-wrap gap-2 border-b border-slate-800 bg-gray-950/95 px-5 py-3 backdrop-blur sm:-mx-8 sm:px-8" id="tab-bar">
+      <button data-tab="products" class="tab-btn active rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs transition">Products</button>
+      <button data-tab="lowstock" class="tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs transition">⚠️ Low Stock <span id="lowstock-badge" class="ml-1 hidden rounded-full bg-rose-600 px-1.5 text-[10px] text-white"></span></button>
+      <button data-tab="restock" class="tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs transition" id="tab-btn-restock">Restock Requests</button>
+      <button data-tab="po" class="tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs transition" id="tab-btn-po">Purchase Orders</button>
+      <button data-tab="receiving" class="tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs transition" id="tab-btn-receiving">Stock Receiving</button>
+      <button data-tab="suppliers" class="tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs transition" id="tab-btn-suppliers">Suppliers</button>
+      <button data-tab="movements" class="tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs transition" id="tab-btn-movements">Movement History</button>
+    </div>
+
+    <!-- PRODUCTS TAB -->
+    <section id="panel-products" class="tab-panel">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-xl font-semibold text-white">Products</h2>
+        <button id="add-product-btn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">+ Add Product</button>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900">
+        <table class="min-w-full text-sm">
+          <thead class="font-mono text-[10px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-3 text-left">Product</th><th class="px-4 py-3 text-left">SKU</th>
+              <th class="px-4 py-3 text-left">Category</th><th class="px-4 py-3 text-right">Stock</th>
+              <th class="px-4 py-3 text-right">Reorder Lvl</th><th class="px-4 py-3 text-right">Max</th>
+              <th class="px-4 py-3 text-right">Cost</th><th class="px-4 py-3 text-right">Price</th>
+              <th class="px-4 py-3 text-left">Supplier</th><th class="px-4 py-3 text-left">Status</th><th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody id="products-body" class="divide-y divide-slate-800"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- LOW STOCK TAB -->
+    <section id="panel-lowstock" class="tab-panel hidden">
+      <h2 class="mb-4 text-xl font-semibold text-white">Low Stock &amp; Out of Stock</h2>
+      <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900">
+        <table class="min-w-full text-sm">
+          <thead class="font-mono text-[10px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-3 text-left">Product</th><th class="px-4 py-3 text-left">SKU</th>
+              <th class="px-4 py-3 text-right">Current Stock</th><th class="px-4 py-3 text-right">Reorder Level</th>
+              <th class="px-4 py-3 text-right">Max Stock</th><th class="px-4 py-3 text-left">Supplier</th>
+              <th class="px-4 py-3 text-left">Status</th><th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody id="lowstock-body" class="divide-y divide-slate-800"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- RESTOCK REQUESTS TAB -->
+    <section id="panel-restock" class="tab-panel hidden">
+      <div class="mb-4 flex items-center justify-between gap-3">
+        <h2 class="text-xl font-semibold text-white">Restock Requests</h2>
+        <select id="restock-status-filter" class="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300">
+          <option value="">All Statuses</option>
+          <option value="Pending Approval">Pending Approval</option>
+          <option value="Approved">Approved</option>
+          <option value="Rejected">Rejected</option>
+          <option value="Purchase Order Created">Purchase Order Created</option>
+          <option value="Ordered">Ordered</option>
+          <option value="Partially Received">Partially Received</option>
+          <option value="Completed">Completed</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900">
+        <table class="min-w-full text-sm">
+          <thead class="font-mono text-[10px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-3 text-left">Ref #</th><th class="px-4 py-3 text-left">Product</th>
+              <th class="px-4 py-3 text-right">Current</th><th class="px-4 py-3 text-right">Requested</th>
+              <th class="px-4 py-3 text-left">Supplier</th><th class="px-4 py-3 text-left">Requested By</th>
+              <th class="px-4 py-3 text-left">Priority</th><th class="px-4 py-3 text-left">Status</th><th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody id="restock-body" class="divide-y divide-slate-800"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PURCHASE ORDERS TAB -->
+    <section id="panel-po" class="tab-panel hidden">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-xl font-semibold text-white">Purchase Orders</h2>
+        <button id="add-po-btn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">+ New Purchase Order</button>
+      </div>
+      <div id="po-list" class="space-y-3"></div>
+    </section>
+
+    <!-- STOCK RECEIVING TAB -->
+    <section id="panel-receiving" class="tab-panel hidden">
+      <h2 class="mb-4 text-xl font-semibold text-white">Stock Receiving History</h2>
+      <div id="receiving-list" class="space-y-3"></div>
+    </section>
+
+    <!-- SUPPLIERS TAB -->
+    <section id="panel-suppliers" class="tab-panel hidden">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-xl font-semibold text-white">Suppliers</h2>
+        <button id="add-supplier-btn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">+ Add Supplier</button>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900">
+        <table class="min-w-full text-sm">
+          <thead class="font-mono text-[10px] uppercase tracking-wider text-slate-500">
+            <tr><th class="px-4 py-3 text-left">Name</th><th class="px-4 py-3 text-left">Contact</th><th class="px-4 py-3 text-left">Phone</th><th class="px-4 py-3 text-left">Email</th><th class="px-4 py-3 text-left">Status</th><th class="px-4 py-3"></th></tr>
+          </thead>
+          <tbody id="suppliers-body" class="divide-y divide-slate-800"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- MOVEMENT HISTORY TAB -->
+    <section id="panel-movements" class="tab-panel hidden">
+      <h2 class="mb-4 text-xl font-semibold text-white">Inventory Movement History</h2>
+      <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900">
+        <table class="min-w-full text-sm">
+          <thead class="font-mono text-[10px] uppercase tracking-wider text-slate-500">
+            <tr><th class="px-4 py-3 text-left">Date</th><th class="px-4 py-3 text-left">Product</th><th class="px-4 py-3 text-left">SKU</th><th class="px-4 py-3 text-left">Type</th><th class="px-4 py-3 text-right">Qty</th><th class="px-4 py-3 text-right">Prev → New</th><th class="px-4 py-3 text-left">Ref</th><th class="px-4 py-3 text-left">By</th></tr>
+          </thead>
+          <tbody id="movements-body" class="divide-y divide-slate-800"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="mt-6 rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <p class="mb-2 font-mono text-[11px] uppercase tracking-wider text-slate-500" id="log-count">0 entries</p>
+      <div id="event-log" class="max-h-40 space-y-1 overflow-y-auto font-mono text-xs"></div>
+    </div>
+  </main>
+  </div>
+
+  <!-- ============ MODALS ============ -->
+
+  <!-- Product Modal -->
+  <div id="product-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6">
+      <h3 id="product-modal-title" class="mb-4 text-lg font-semibold text-white">Add Product</h3>
+      <form id="product-form" class="grid grid-cols-2 gap-3">
+        <input type="hidden" id="p-id">
+        <label class="col-span-2 text-xs text-slate-400">Name<input required id="p-name" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">SKU<input required id="p-sku" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Category<input required id="p-category" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Unit<input id="p-unit" value="pc" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Emoji
+          <select id="p-emoji" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
+            <option value="🛒">🛒 General Product</option>
+            <option value="🍔">🍔 Burger / Meal</option>
+            <option value="🍕">🍕 Pizza</option>
+            <option value="🍗">🍗 Meat / Chicken</option>
+            <option value="🥤">🥤 Beverage</option>
+            <option value="☕">☕ Coffee</option>
+            <option value="🍞">🍞 Bakery</option>
+            <option value="🧁">🧁 Pastry</option>
+            <option value="🥛">🥛 Dairy</option>
+            <option value="🍎">🍎 Fruit</option>
+            <option value="🥬">🥬 Vegetable</option>
+            <option value="🧴">🧴 Household</option>
+            <option value="__custom__">✨ Other / Custom…</option>
+          </select>
+        </label>
+        <label id="p-custom-emoji-wrap" class="hidden text-xs text-slate-400">Custom Emoji
+          <input id="p-custom-emoji" maxlength="8" placeholder="Paste an emoji, e.g. 🌯" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
+        </label>
+        <label class="text-xs text-slate-400">Selling Price<input required type="number" step="0.01" min="0" id="p-price" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Cost Price<input type="number" step="0.01" min="0" id="p-cost" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Current Stock<input type="number" min="0" id="p-stock" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Reorder Level<input type="number" min="0" id="p-reorder" value="5" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Min Stock<input type="number" min="0" id="p-min" value="0" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Max Stock<input type="number" min="0" id="p-max" value="100" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Supplier
+          <select id="p-supplier" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option value="">— none —</option></select>
+        </label>
+        <label class="text-xs text-slate-400">Status
+          <select id="p-status" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option>Active</option><option>Inactive</option></select>
+        </label>
+        <p id="product-form-error" class="col-span-2 hidden text-xs text-rose-400"></p>
+        <div class="col-span-2 mt-2 flex justify-end gap-2">
+          <button type="button" class="modal-cancel rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+          <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Save Product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Supplier Modal -->
+  <div id="supplier-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6">
+      <h3 id="supplier-modal-title" class="mb-4 text-lg font-semibold text-white">Add Supplier</h3>
+      <form id="supplier-form" class="grid gap-3">
+        <input type="hidden" id="s-id">
+        <label class="text-xs text-slate-400">Name<input required id="s-name" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Contact Person<input id="s-contact" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Phone<input id="s-phone" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Email<input type="email" id="s-email" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Address<textarea id="s-address" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></textarea></label>
+        <label class="text-xs text-slate-400">Status
+          <select id="s-status" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option>Active</option><option>Inactive</option></select>
+        </label>
+        <p id="supplier-form-error" class="hidden text-xs text-rose-400"></p>
+        <div class="mt-2 flex justify-end gap-2">
+          <button type="button" class="modal-cancel rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+          <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Save Supplier</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Request Restock Modal -->
+  <div id="restock-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6">
+      <h3 class="mb-1 text-lg font-semibold text-white">Request Restock</h3>
+      <p id="restock-modal-product" class="mb-4 font-mono text-xs text-slate-500"></p>
+      <form id="restock-form" class="grid gap-3">
+        <input type="hidden" id="r-product-id">
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div class="rounded-lg border border-slate-800 bg-slate-950 p-2"><p class="text-[10px] text-slate-500">Current</p><p id="r-current" class="font-mono text-sm text-white">—</p></div>
+          <div class="rounded-lg border border-slate-800 bg-slate-950 p-2"><p class="text-[10px] text-slate-500">Reorder Lvl</p><p id="r-reorder" class="font-mono text-sm text-white">—</p></div>
+          <div class="rounded-lg border border-slate-800 bg-slate-950 p-2"><p class="text-[10px] text-slate-500">Max</p><p id="r-max" class="font-mono text-sm text-white">—</p></div>
+        </div>
+        <label class="text-xs text-slate-400">Recommended Quantity (Max − Current)<input readonly id="r-recommended" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-300"></label>
+        <label class="text-xs text-slate-400">Requested Quantity (editable)<input required type="number" min="1" id="r-requested" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Priority
+          <select id="r-priority" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
+            <option>Normal</option><option>Low</option><option>High</option><option>Urgent</option>
+          </select>
+        </label>
+        <label class="text-xs text-slate-400">Reason<input id="r-reason" placeholder="e.g. Weekend demand spike" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Notes<textarea id="r-notes" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></textarea></label>
+        <p id="restock-form-error" class="hidden text-xs text-rose-400"></p>
+        <div class="mt-2 flex justify-end gap-2">
+          <button type="button" class="modal-cancel rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+          <button type="submit" class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500">Submit Request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Approve/Reject Restock Modal -->
+  <div id="review-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6">
+      <h3 class="mb-4 text-lg font-semibold text-white">Review Restock Request</h3>
+      <div id="review-summary" class="mb-4 space-y-1 font-mono text-xs text-slate-400"></div>
+      <form id="review-form" class="grid gap-3">
+        <input type="hidden" id="rv-id">
+        <label class="text-xs text-slate-400">Expected Delivery Date (if approving)<input type="date" id="rv-eta" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Rejection Reason (required if rejecting)<textarea id="rv-reason" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></textarea></label>
+        <p id="review-form-error" class="hidden text-xs text-rose-400"></p>
+        <div class="mt-2 flex justify-end gap-2">
+          <button type="button" class="modal-cancel rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+          <button type="button" id="rv-reject-btn" class="rounded-lg border border-rose-700 px-4 py-2 text-sm font-semibold text-rose-400 hover:bg-rose-950">Reject</button>
+          <button type="button" id="rv-approve-btn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Approve</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- New PO Modal -->
+  <div id="po-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-6">
+      <h3 class="mb-4 text-lg font-semibold text-white">New Purchase Order</h3>
+      <form id="po-form" class="grid gap-3">
+        <label class="text-xs text-slate-400">Supplier
+          <select id="po-supplier" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option value="">— none —</option></select>
+        </label>
+        <label class="text-xs text-slate-400">Expected Delivery Date<input type="date" id="po-eta" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Notes<textarea id="po-notes" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></textarea></label>
+        <div>
+          <p class="mb-2 text-xs uppercase tracking-wider text-slate-500">Line Items</p>
+          <div id="po-items" class="space-y-2"></div>
+          <button type="button" id="po-add-item" class="mt-2 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:border-emerald-500">+ Add Line Item</button>
+        </div>
+        <p id="po-form-error" class="hidden text-xs text-rose-400"></p>
+        <div class="mt-2 flex justify-end gap-2">
+          <button type="button" class="modal-cancel rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+          <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Create PO</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Receive Stock Modal -->
+  <div id="receive-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-6">
+      <h3 class="mb-1 text-lg font-semibold text-white">Receive Stock</h3>
+      <p id="receive-po-label" class="mb-4 font-mono text-xs text-slate-500"></p>
+      <form id="receive-form" class="grid gap-3">
+        <input type="hidden" id="rc-po-id">
+        <div id="receive-items" class="space-y-3"></div>
+        <label class="text-xs text-slate-400">Invoice Number<input id="rc-invoice" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Payment Due Date<input type="date" id="rc-due" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Notes<textarea id="rc-notes" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></textarea></label>
+        <p id="receive-form-error" class="hidden text-xs text-rose-400"></p>
+        <div class="mt-2 flex justify-end gap-2">
+          <button type="button" class="modal-cancel rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+          <button type="submit" class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500">Record Receiving</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script>
+const API_BASE = '../backend';
+const FETCH_OPTS = { credentials: 'same-origin' };
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function formatCurrency(amount) {
+  return '₱' + Number(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function log(type, message) {
+  const eventLog = document.getElementById('event-log');
+  const line = document.createElement('div');
+  line.className = 'flex items-center gap-2';
+  const stamp = new Date().toLocaleTimeString('en-US', { hour12: true });
+  const badgeColors = { SUCCESS:'bg-emerald-950 text-emerald-400 border-emerald-900/50', ERROR:'bg-rose-950 text-rose-400 border-rose-900/50', SYSTEM:'bg-cyan-950 text-cyan-400 border-cyan-900/50' };
+  line.innerHTML = '<span class="shrink-0 text-slate-600 text-[10px]">' + stamp + '</span>' +
+    '<span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold border ' + (badgeColors[type]||'bg-slate-800 text-slate-400 border-slate-700') + '">' + type + '</span>' +
+    '<span class="text-slate-300">' + escapeHtml(message) + '</span>';
+  eventLog.append(line);
+  eventLog.scrollTop = eventLog.scrollHeight;
+  document.getElementById('log-count').textContent = eventLog.children.length + ' entries';
+}
+
+let sessionPermissions = [];
+let allProducts = [];
+let allSuppliers = [];
+
+function has(perm) { return sessionPermissions.includes(perm); }
+
+function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); }
+document.querySelectorAll('.modal-cancel').forEach(btn => btn.addEventListener('click', () => {
+  btn.closest('.fixed').classList.add('hidden');
+  btn.closest('.fixed').classList.remove('flex');
+}));
+
+// ---------------- TABS ----------------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('hidden', p.id !== 'panel-' + tab));
+  if (tab === 'products') loadProducts();
+  if (tab === 'lowstock') loadLowStock();
+  if (tab === 'restock') loadRestockRequests();
+  if (tab === 'po') loadPurchaseOrders();
+  if (tab === 'receiving') loadReceivings();
+  if (tab === 'suppliers') loadSuppliers();
+  if (tab === 'movements') loadMovements();
+}
+
+// ---------------- INIT / GUARD ----------------
+(async () => {
+  const session = await guardPage(['inventory.manage', 'restock.request', 'restock.approve']);
+  if (!session) return;
+  sessionPermissions = session.permissions || [];
+
+  const userDisplay = document.getElementById('user-display');
+  const userNameEl = document.getElementById('user-name');
+  if (userDisplay && userNameEl) { userNameEl.textContent = session.full_name || session.username; userDisplay.classList.remove('hidden'); }
+  document.getElementById('logout-btn').addEventListener('click', logoutAndRedirect);
+
+  const hasAdminAccess = ['system.users.manage','system.roles.manage','system.audit.view','system.settings.manage'].some(has);
+  if (hasAdminAccess) document.getElementById('inventory-admin-link').classList.remove('hidden');
+
+  if (!has('inventory.manage')) {
+    document.getElementById('add-product-btn').classList.add('hidden');
+    document.getElementById('tab-btn-suppliers').classList.add('hidden');
+    document.getElementById('tab-btn-receiving').classList.add('hidden');
+    document.getElementById('tab-btn-movements').classList.add('hidden');
+  }
+  if (!has('inventory.manage') && !has('restock.approve')) {
+    document.getElementById('tab-btn-po').classList.add('hidden');
+  }
+  if (!has('inventory.manage')) {
+    document.getElementById('add-po-btn').classList.add('hidden');
+  }
+  if (!has('restock.request') && !has('restock.approve') && !has('inventory.manage')) {
+    document.getElementById('tab-btn-restock').classList.add('hidden');
+  }
+
+  document.getElementById('inv-app').classList.remove('hidden');
+  await loadSuppliersIntoSelects();
+  loadProducts();
+  loadLowStock();
+})();
+
+// ================= PRODUCTS =================
+async function loadProducts() {
+  try {
+    const r = await fetch(API_BASE + '/products.php', FETCH_OPTS);
+    const payload = await r.json();
+    const products = Array.isArray(payload) ? payload : payload.products;
+    if (!r.ok || !Array.isArray(products)) throw new Error(payload.error || 'Failed to load products.');
+    allProducts = products;
+    renderProducts(products);
+  } catch (e) { log('ERROR', e.message); }
+}
+function renderProducts(products) {
+  const body = document.getElementById('products-body');
+  if (!products.length) { body.innerHTML = '<tr><td colspan="11" class="px-4 py-6 text-center text-slate-500">No products yet.</td></tr>'; return; }
+  body.innerHTML = products.map(p => `
+    <tr class="${p.low_stock ? 'bg-rose-950/20' : ''}">
+      <td class="px-4 py-3 font-medium text-white">${p.emoji || '🛒'} ${escapeHtml(p.name)}</td>
+      <td class="px-4 py-3 font-mono text-xs text-slate-400">${escapeHtml(p.sku)}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(p.category)}</td>
+      <td class="px-4 py-3 text-right font-mono ${p.low_stock ? 'text-rose-400' : 'text-slate-300'}">${p.stock_quantity} ${escapeHtml(p.unit)}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-400">${p.reorder_level}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-400">${p.max_stock}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-400">${formatCurrency(p.cost_price)}</td>
+      <td class="px-4 py-3 text-right font-mono text-emerald-400">${formatCurrency(p.price)}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(p.supplier_name || '—')}</td>
+      <td class="px-4 py-3"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${p.status === 'Active' ? 'bg-emerald-950 text-emerald-400' : 'bg-slate-800 text-slate-400'}">${p.status}</span></td>
+      <td class="px-4 py-3 text-right">${has('inventory.manage') ? `<button data-edit-product="${p.id}" class="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-emerald-500">Edit</button>` : ''}</td>
+    </tr>`).join('');
+  body.querySelectorAll('[data-edit-product]').forEach(btn => btn.addEventListener('click', () => editProduct(Number(btn.dataset.editProduct))));
+}
+
+async function loadSuppliersIntoSelects() {
+  try {
+    const r = await fetch(API_BASE + '/suppliers.php', FETCH_OPTS);
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) return;
+    allSuppliers = payload.suppliers;
+    const opts = '<option value="">— none —</option>' + allSuppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    ['p-supplier', 'po-supplier'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = opts; });
+  } catch (e) { /* non-fatal */ }
+}
+
+document.getElementById('add-product-btn').addEventListener('click', () => {
+  document.getElementById('product-form').reset();
+  document.getElementById('p-id').value = '';
+  document.getElementById('p-unit').value = 'pc';
+  document.getElementById('p-emoji').value = '🛒';
+  document.getElementById('p-custom-emoji').value = '';
+  document.getElementById('p-custom-emoji-wrap').classList.add('hidden');
+  document.getElementById('p-reorder').value = 5;
+  document.getElementById('p-min').value = 0;
+  document.getElementById('p-max').value = 100;
+  document.getElementById('product-modal-title').textContent = 'Add Product';
+  document.getElementById('product-form-error').classList.add('hidden');
+  openModal('product-modal');
+});
+function editProduct(id) {
+  const p = allProducts.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('p-id').value = p.id;
+  document.getElementById('p-name').value = p.name;
+  document.getElementById('p-sku').value = p.sku;
+  document.getElementById('p-category').value = p.category;
+  document.getElementById('p-unit').value = p.unit;
+  {
+    const emojiSelect = document.getElementById('p-emoji');
+    const customWrap = document.getElementById('p-custom-emoji-wrap');
+    const customInput = document.getElementById('p-custom-emoji');
+    const value = p.emoji || '🛒';
+    const known = Array.from(emojiSelect.options).some(o => o.value === value);
+    emojiSelect.value = known ? value : '__custom__';
+    customInput.value = known ? '' : value;
+    customWrap.classList.toggle('hidden', emojiSelect.value !== '__custom__');
+  }
+  document.getElementById('p-price').value = p.price;
+  document.getElementById('p-cost').value = p.cost_price;
+  document.getElementById('p-stock').value = p.stock_quantity;
+  document.getElementById('p-reorder').value = p.reorder_level;
+  document.getElementById('p-min').value = p.min_stock;
+  document.getElementById('p-max').value = p.max_stock;
+  document.getElementById('p-supplier').value = p.supplier_id || '';
+  document.getElementById('p-status').value = p.status;
+  document.getElementById('product-modal-title').textContent = 'Edit Product';
+  document.getElementById('product-form-error').classList.add('hidden');
+  openModal('product-modal');
+}
+document.getElementById('product-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errEl = document.getElementById('product-form-error');
+  errEl.classList.add('hidden');
+  if (document.getElementById('p-emoji').value === '__custom__' && !document.getElementById('p-custom-emoji').value.trim()) {
+    errEl.textContent = 'Enter or paste a custom emoji.'; errEl.classList.remove('hidden'); return;
+  }
+  const body = {
+    id: document.getElementById('p-id').value || undefined,
+    name: document.getElementById('p-name').value.trim(),
+    sku: document.getElementById('p-sku').value.trim(),
+    category: document.getElementById('p-category').value.trim(),
+    unit: document.getElementById('p-unit').value.trim(),
+    emoji: (document.getElementById('p-emoji').value === '__custom__'
+      ? document.getElementById('p-custom-emoji').value.trim()
+      : document.getElementById('p-emoji').value.trim()),
+    price: document.getElementById('p-price').value,
+    cost_price: document.getElementById('p-cost').value,
+    stock_quantity: document.getElementById('p-stock').value,
+    reorder_level: document.getElementById('p-reorder').value,
+    min_stock: document.getElementById('p-min').value,
+    max_stock: document.getElementById('p-max').value,
+    supplier_id: document.getElementById('p-supplier').value,
+    status: document.getElementById('p-status').value,
+  };
+  try {
+    const r = await fetch(API_BASE + '/product_save.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to save product.');
+    closeModal('product-modal');
+    log('SUCCESS', 'Product "' + body.name + '" saved.');
+    loadProducts(); loadLowStock();
+  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+});
+
+// ================= LOW STOCK =================
+async function loadLowStock() {
+  try {
+    const r = await fetch(API_BASE + '/products.php?action=low_stock', FETCH_OPTS);
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load low stock.');
+    renderLowStock(payload.products);
+    const badge = document.getElementById('lowstock-badge');
+    if (payload.products.length) { badge.textContent = payload.products.length; badge.classList.remove('hidden'); }
+    else { badge.classList.add('hidden'); }
+  } catch (e) { log('ERROR', e.message); }
+}
+function renderLowStock(products) {
+  const body = document.getElementById('lowstock-body');
+  if (!products.length) { body.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-emerald-400">All items are above their reorder level. 🎉</td></tr>'; return; }
+  body.innerHTML = products.map(p => `
+    <tr>
+      <td class="px-4 py-3 font-medium text-white">${p.emoji || '🛒'} ${escapeHtml(p.name)}</td>
+      <td class="px-4 py-3 font-mono text-xs text-slate-400">${escapeHtml(p.sku)}</td>
+      <td class="px-4 py-3 text-right font-mono ${p.stock_quantity <= 0 ? 'text-rose-500' : 'text-amber-400'}">${p.stock_quantity}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-400">${p.reorder_level}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-400">${p.max_stock}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(p.supplier_name || '—')}</td>
+      <td class="px-4 py-3"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${p.status_label === 'Out of Stock' ? 'bg-rose-950 text-rose-400' : 'bg-amber-950 text-amber-400'}">${p.status_label}</span></td>
+      <td class="px-4 py-3 text-right">${has('restock.request') ? `<button data-request-restock='${JSON.stringify(p)}' class="rounded bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500">Request Restock</button>` : ''}</td>
+    </tr>`).join('');
+  body.querySelectorAll('[data-request-restock]').forEach(btn => btn.addEventListener('click', () => openRestockModal(JSON.parse(btn.dataset.requestRestock))));
+}
+
+function openRestockModal(p) {
+  document.getElementById('r-product-id').value = p.id;
+  document.getElementById('restock-modal-product').textContent = p.name + ' (' + p.sku + ')';
+  document.getElementById('r-current').textContent = p.stock_quantity;
+  document.getElementById('r-reorder').textContent = p.reorder_level;
+  document.getElementById('r-max').textContent = p.max_stock;
+  const recommended = Math.max(0, p.max_stock - p.stock_quantity);
+  document.getElementById('r-recommended').value = recommended;
+  document.getElementById('r-requested').value = recommended;
+  document.getElementById('r-priority').value = p.stock_quantity <= 0 ? 'Urgent' : 'Normal';
+  document.getElementById('r-reason').value = '';
+  document.getElementById('r-notes').value = '';
+  document.getElementById('restock-form-error').classList.add('hidden');
+  openModal('restock-modal');
+}
+document.getElementById('restock-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errEl = document.getElementById('restock-form-error');
+  errEl.classList.add('hidden');
+  const body = {
+    product_id: document.getElementById('r-product-id').value,
+    requested_quantity: document.getElementById('r-requested').value,
+    priority: document.getElementById('r-priority').value,
+    reason: document.getElementById('r-reason').value.trim(),
+    notes: document.getElementById('r-notes').value.trim(),
+  };
+  try {
+    const r = await fetch(API_BASE + '/restock_request_create.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to submit restock request.');
+    closeModal('restock-modal');
+    log('SUCCESS', 'Restock request ' + payload.ref_number + ' submitted for approval.');
+    loadRestockRequests();
+  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+});
+
+// ================= RESTOCK REQUESTS =================
+document.getElementById('restock-status-filter').addEventListener('change', loadRestockRequests);
+async function loadRestockRequests() {
+  try {
+    const status = document.getElementById('restock-status-filter').value;
+    const url = API_BASE + '/restock_requests.php' + (status ? '?status=' + encodeURIComponent(status) : '');
+    const r = await fetch(url, FETCH_OPTS);
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load restock requests.');
+    renderRestockRequests(payload.requests);
+  } catch (e) { log('ERROR', e.message); }
+}
+const RESTOCK_STATUS_COLORS = {
+  'Pending Approval': 'bg-amber-950 text-amber-400', 'Approved': 'bg-emerald-950 text-emerald-400',
+  'Rejected': 'bg-rose-950 text-rose-400', 'Purchase Order Created': 'bg-cyan-950 text-cyan-400',
+  'Ordered': 'bg-cyan-950 text-cyan-400', 'Partially Received': 'bg-purple-950 text-purple-400',
+  'Fully Received': 'bg-emerald-950 text-emerald-400', 'Completed': 'bg-emerald-950 text-emerald-400',
+  'Cancelled': 'bg-slate-800 text-slate-400',
+};
+function renderRestockRequests(rows) {
+  const body = document.getElementById('restock-body');
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="9" class="px-4 py-6 text-center text-slate-500">No restock requests.</td></tr>'; return; }
+  body.innerHTML = rows.map(rq => `
+    <tr>
+      <td class="px-4 py-3 font-mono text-xs text-slate-400">${escapeHtml(rq.ref_number || '#' + rq.id)}</td>
+      <td class="px-4 py-3 text-white">${rq.emoji || '🛒'} ${escapeHtml(rq.product_name || rq.sku)}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-400">${rq.current_stock}</td>
+      <td class="px-4 py-3 text-right font-mono text-white">${rq.requested_quantity}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(rq.supplier_name || '—')}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(rq.requested_by)}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(rq.priority)}</td>
+      <td class="px-4 py-3"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${RESTOCK_STATUS_COLORS[rq.status]||'bg-slate-800 text-slate-400'}">${escapeHtml(rq.status)}</span></td>
+      <td class="px-4 py-3 text-right">${(has('restock.approve') && rq.status === 'Pending Approval') ? `<button data-review='${JSON.stringify(rq)}' class="rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500">Review</button>` : ''}</td>
+    </tr>`).join('');
+  body.querySelectorAll('[data-review]').forEach(btn => btn.addEventListener('click', () => openReviewModal(JSON.parse(btn.dataset.review))));
+}
+
+function openReviewModal(rq) {
+  document.getElementById('rv-id').value = rq.id;
+  document.getElementById('review-summary').innerHTML =
+    `<p>Product: <span class="text-white">${escapeHtml(rq.product_name)}</span></p>` +
+    `<p>Requested Qty: <span class="text-white">${rq.requested_quantity}</span> (recommended ${rq.recommended_quantity})</p>` +
+    `<p>Supplier: <span class="text-white">${escapeHtml(rq.supplier_name || '—')}</span></p>` +
+    `<p>Reason: <span class="text-white">${escapeHtml(rq.reason || '—')}</span></p>`;
+  document.getElementById('rv-eta').value = '';
+  document.getElementById('rv-reason').value = '';
+  document.getElementById('review-form-error').classList.add('hidden');
+  openModal('review-modal');
+}
+async function submitReview(decision) {
+  const errEl = document.getElementById('review-form-error');
+  errEl.classList.add('hidden');
+  const body = {
+    id: document.getElementById('rv-id').value,
+    decision,
+    expected_delivery_date: document.getElementById('rv-eta').value,
+    rejection_reason: document.getElementById('rv-reason').value.trim(),
+  };
+  try {
+    const r = await fetch(API_BASE + '/restock_request_review.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to review request.');
+    closeModal('review-modal');
+    if (decision === 'Approved') log('SUCCESS', 'Approved. Purchase Order ' + (payload.po_number || '') + ' created.');
+    else log('SUCCESS', 'Restock request rejected.');
+    loadRestockRequests(); loadPurchaseOrders();
+  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+}
+document.getElementById('rv-approve-btn').addEventListener('click', () => submitReview('Approved'));
+document.getElementById('rv-reject-btn').addEventListener('click', () => {
+  if (!document.getElementById('rv-reason').value.trim()) {
+    const errEl = document.getElementById('review-form-error');
+    errEl.textContent = 'A rejection reason is required.'; errEl.classList.remove('hidden');
+    return;
+  }
+  submitReview('Rejected');
+});
+
+// ================= PURCHASE ORDERS =================
+const PO_STATUS_COLORS = {
+  'Pending': 'bg-slate-800 text-slate-400', 'Approved': 'bg-cyan-950 text-cyan-400', 'Ordered': 'bg-amber-950 text-amber-400',
+  'Partially Received': 'bg-purple-950 text-purple-400', 'Fully Received': 'bg-emerald-950 text-emerald-400', 'Cancelled': 'bg-rose-950 text-rose-400',
+};
+async function loadPurchaseOrders() {
+  try {
+    const r = await fetch(API_BASE + '/purchase_orders.php', FETCH_OPTS);
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load purchase orders.');
+    renderPurchaseOrders(payload.purchase_orders);
+  } catch (e) { log('ERROR', e.message); }
+}
+function renderPurchaseOrders(pos) {
+  const el = document.getElementById('po-list');
+  if (!pos.length) { el.innerHTML = '<p class="text-center text-slate-500">No purchase orders yet.</p>'; return; }
+  el.innerHTML = pos.map(po => {
+    const itemsHtml = po.items.map(i => `
+      <tr><td class="px-3 py-2 text-white">${i.emoji || '🛒'} ${escapeHtml(i.product_name)}</td>
+      <td class="px-3 py-2 font-mono text-xs text-slate-400">${escapeHtml(i.sku)}</td>
+      <td class="px-3 py-2 text-right font-mono text-slate-300">${i.quantity_ordered}</td>
+      <td class="px-3 py-2 text-right font-mono text-emerald-400">${i.quantity_received}</td>
+      <td class="px-3 py-2 text-right font-mono text-slate-400">${formatCurrency(i.unit_cost)}</td></tr>`).join('');
+    const canReceive = has('inventory.manage') && !['Fully Received', 'Cancelled'].includes(po.status);
+    const canMarkOrdered = has('inventory.manage') && po.status === 'Pending';
+    return `<div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div><span class="font-mono text-sm text-white">${escapeHtml(po.po_number)}</span>
+          ${po.restock_ref_number ? `<span class="ml-2 font-mono text-[10px] text-slate-500">from ${escapeHtml(po.restock_ref_number)}</span>` : ''}</div>
+        <span class="rounded px-2 py-0.5 text-[10px] font-semibold ${PO_STATUS_COLORS[po.status]||'bg-slate-800 text-slate-400'}">${escapeHtml(po.status)}</span>
+      </div>
+      <p class="mb-2 text-xs text-slate-400">Supplier: <span class="text-slate-300">${escapeHtml(po.supplier_name || '—')}</span> · Order Date: ${escapeHtml((po.order_date||'').slice(0,10))} · ETA: ${escapeHtml(po.expected_delivery_date || '—')}</p>
+      <table class="min-w-full text-xs"><thead class="text-slate-500"><tr><th class="px-3 py-1 text-left">Product</th><th class="px-3 py-1 text-left">SKU</th><th class="px-3 py-1 text-right">Ordered</th><th class="px-3 py-1 text-right">Received</th><th class="px-3 py-1 text-right">Unit Cost</th></tr></thead>
+      <tbody class="divide-y divide-slate-800">${itemsHtml}</tbody></table>
+      <div class="mt-3 flex justify-end gap-2">
+        ${canMarkOrdered ? `<button data-mark-ordered="${po.id}" class="rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:border-amber-500">Mark Ordered</button>` : ''}
+        ${canReceive ? `<button data-receive='${po.id}' class="rounded bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500">Receive Stock</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-mark-ordered]').forEach(btn => btn.addEventListener('click', () => markOrdered(Number(btn.dataset.markOrdered))));
+  el.querySelectorAll('[data-receive]').forEach(btn => {
+    const po = pos.find(p => p.id === Number(btn.dataset.receive));
+    btn.addEventListener('click', () => openReceiveModal(po));
+  });
+}
+async function markOrdered(id) {
+  try {
+    const r = await fetch(API_BASE + '/purchase_order_update_status.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status: 'Ordered' }) });
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to update PO.');
+    log('SUCCESS', 'PO #' + id + ' marked Ordered.');
+    loadPurchaseOrders();
+  } catch (e) { log('ERROR', e.message); }
+}
+
+document.getElementById('add-po-btn').addEventListener('click', () => {
+  document.getElementById('po-form').reset();
+  document.getElementById('po-items').innerHTML = '';
+  addPoItemRow();
+  document.getElementById('po-form-error').classList.add('hidden');
+  openModal('po-modal');
+});
+document.getElementById('po-add-item').addEventListener('click', addPoItemRow);
+function addPoItemRow() {
+  const row = document.createElement('div');
+  row.className = 'flex gap-2 items-center po-item-row';
+  const opts = allProducts.map(p => `<option value="${p.id}" data-cost="${p.cost_price}">${escapeHtml(p.name)} (${escapeHtml(p.sku)})</option>`).join('');
+  row.innerHTML = `
+    <select class="po-item-product flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white">${opts}</select>
+    <input type="number" min="1" value="1" class="po-item-qty w-20 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" placeholder="Qty">
+    <input type="number" min="0" step="0.01" class="po-item-cost w-24 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" placeholder="Unit Cost">
+    <button type="button" class="remove-po-item rounded border border-rose-800 px-2 py-1 text-xs text-rose-400">✕</button>`;
+  document.getElementById('po-items').appendChild(row);
+  row.querySelector('.remove-po-item').addEventListener('click', () => row.remove());
+  const sel = row.querySelector('.po-item-product');
+  const costInput = row.querySelector('.po-item-cost');
+  const fillCost = () => { const opt = sel.selectedOptions[0]; if (opt) costInput.value = opt.dataset.cost; };
+  sel.addEventListener('change', fillCost); fillCost();
+}
+document.getElementById('po-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errEl = document.getElementById('po-form-error');
+  errEl.classList.add('hidden');
+  const items = Array.from(document.querySelectorAll('.po-item-row')).map(row => ({
+    product_id: row.querySelector('.po-item-product').value,
+    quantity: row.querySelector('.po-item-qty').value,
+    unit_cost: row.querySelector('.po-item-cost').value,
+  }));
+  const body = {
+    supplier_id: document.getElementById('po-supplier').value,
+    expected_delivery_date: document.getElementById('po-eta').value,
+    notes: document.getElementById('po-notes').value.trim(),
+    items,
+  };
+  try {
+    const r = await fetch(API_BASE + '/purchase_order_create.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to create PO.');
+    closeModal('po-modal');
+    log('SUCCESS', 'Purchase Order ' + payload.po_number + ' created.');
+    loadPurchaseOrders();
+  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+});
+
+// ================= STOCK RECEIVING =================
+function openReceiveModal(po) {
+  document.getElementById('rc-po-id').value = po.id;
+  document.getElementById('receive-po-label').textContent = po.po_number + ' — ' + (po.supplier_name || 'No supplier');
+  const container = document.getElementById('receive-items');
+  container.innerHTML = po.items.filter(i => i.quantity_received < i.quantity_ordered).map(i => `
+    <div class="rounded-lg border border-slate-800 bg-slate-950 p-3 receive-item-row" data-poi="${i.id}">
+      <p class="mb-2 text-sm text-white">${i.emoji||'🛒'} ${escapeHtml(i.product_name)} <span class="font-mono text-xs text-slate-500">(${escapeHtml(i.sku)}) — remaining ${i.quantity_ordered - i.quantity_received}</span></p>
+      <div class="grid grid-cols-4 gap-2">
+        <label class="text-[10px] text-slate-500">Received<input type="number" min="0" max="${i.quantity_ordered - i.quantity_received}" value="${i.quantity_ordered - i.quantity_received}" class="ri-received mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white"></label>
+        <label class="text-[10px] text-slate-500">Damaged<input type="number" min="0" value="0" class="ri-damaged mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white"></label>
+        <label class="text-[10px] text-slate-500">Rejected<input type="number" min="0" value="0" class="ri-rejected mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white"></label>
+        <label class="text-[10px] text-slate-500">Batch #<input class="ri-batch mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white"></label>
+        <label class="col-span-2 text-[10px] text-slate-500">Expiration Date<input type="date" class="ri-expiry mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white"></label>
+      </div>
+    </div>`).join('');
+  document.getElementById('rc-invoice').value = '';
+  document.getElementById('rc-due').value = '';
+  document.getElementById('rc-notes').value = '';
+  document.getElementById('receive-form-error').classList.add('hidden');
+  openModal('receive-modal');
+}
+document.getElementById('receive-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errEl = document.getElementById('receive-form-error');
+  errEl.classList.add('hidden');
+  const items = Array.from(document.querySelectorAll('.receive-item-row')).map(row => ({
+    purchase_order_item_id: row.dataset.poi,
+    received_quantity: row.querySelector('.ri-received').value,
+    damaged_quantity: row.querySelector('.ri-damaged').value,
+    rejected_quantity: row.querySelector('.ri-rejected').value,
+    batch_no: row.querySelector('.ri-batch').value,
+    expiration_date: row.querySelector('.ri-expiry').value,
+  })).filter(i => Number(i.received_quantity) > 0);
+  const body = {
+    purchase_order_id: document.getElementById('rc-po-id').value,
+    invoice_number: document.getElementById('rc-invoice').value.trim(),
+    due_date: document.getElementById('rc-due').value,
+    notes: document.getElementById('rc-notes').value.trim(),
+    items,
+  };
+  try {
+    const r = await fetch(API_BASE + '/receive_purchase_order.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to record receiving.');
+    closeModal('receive-modal');
+    log('SUCCESS', payload.message || 'Stock received.');
+    loadPurchaseOrders(); loadProducts(); loadLowStock(); loadReceivings(); loadRestockRequests();
+  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+});
+
+async function loadReceivings() {
+  try {
+    const r = await fetch(API_BASE + '/stock_receivings.php', FETCH_OPTS);
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load receivings.');
+    renderReceivings(payload.receivings);
+  } catch (e) { log('ERROR', e.message); }
+}
+function renderReceivings(rows) {
+  const el = document.getElementById('receiving-list');
+  if (!rows.length) { el.innerHTML = '<p class="text-center text-slate-500">No stock receivings recorded yet.</p>'; return; }
+  el.innerHTML = rows.map(rec => {
+    const itemsHtml = rec.items.map(i => `<tr><td class="px-3 py-2 text-slate-300">${escapeHtml(i.sku)}</td><td class="px-3 py-2 text-right font-mono text-emerald-400">${i.received_quantity}</td><td class="px-3 py-2 text-right font-mono text-rose-400">${i.damaged_quantity}</td><td class="px-3 py-2 text-right font-mono text-amber-400">${i.rejected_quantity}</td><td class="px-3 py-2 text-slate-400">${escapeHtml(i.batch_no||'—')}</td><td class="px-3 py-2 text-slate-400">${escapeHtml(i.expiration_date||'—')}</td></tr>`).join('');
+    return `<div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <p class="mb-2 text-sm text-white">Receiving #${rec.id} — <span class="font-mono text-xs text-slate-500">${escapeHtml(rec.po_number||'')}</span></p>
+      <p class="mb-2 text-xs text-slate-500">By ${escapeHtml(rec.received_by)} on ${escapeHtml((rec.receiving_date||'').slice(0,16))}</p>
+      <table class="min-w-full text-xs"><thead class="text-slate-500"><tr><th class="px-3 py-1 text-left">SKU</th><th class="px-3 py-1 text-right">Received</th><th class="px-3 py-1 text-right">Damaged</th><th class="px-3 py-1 text-right">Rejected</th><th class="px-3 py-1 text-left">Batch</th><th class="px-3 py-1 text-left">Expiry</th></tr></thead>
+      <tbody class="divide-y divide-slate-800">${itemsHtml}</tbody></table>
+    </div>`;
+  }).join('');
+}
+
+// ================= SUPPLIERS =================
+async function loadSuppliers() {
+  try {
+    const r = await fetch(API_BASE + '/suppliers.php', FETCH_OPTS);
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load suppliers.');
+    allSuppliers = payload.suppliers;
+    renderSuppliers(payload.suppliers);
+  } catch (e) { log('ERROR', e.message); }
+}
+function renderSuppliers(rows) {
+  const body = document.getElementById('suppliers-body');
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No suppliers yet.</td></tr>'; return; }
+  body.innerHTML = rows.map(s => `
+    <tr>
+      <td class="px-4 py-3 font-medium text-white">${escapeHtml(s.name)}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(s.contact_person || '—')}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(s.phone || '—')}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(s.email || '—')}</td>
+      <td class="px-4 py-3"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${s.status === 'Active' ? 'bg-emerald-950 text-emerald-400' : 'bg-slate-800 text-slate-400'}">${s.status}</span></td>
+      <td class="px-4 py-3 text-right"><button data-edit-supplier='${JSON.stringify(s)}' class="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-emerald-500">Edit</button></td>
+    </tr>`).join('');
+  body.querySelectorAll('[data-edit-supplier]').forEach(btn => btn.addEventListener('click', () => editSupplier(JSON.parse(btn.dataset.editSupplier))));
+}
+document.getElementById('add-supplier-btn').addEventListener('click', () => {
+  document.getElementById('supplier-form').reset();
+  document.getElementById('s-id').value = '';
+  document.getElementById('supplier-modal-title').textContent = 'Add Supplier';
+  document.getElementById('supplier-form-error').classList.add('hidden');
+  openModal('supplier-modal');
+});
+function editSupplier(s) {
+  document.getElementById('s-id').value = s.id;
+  document.getElementById('s-name').value = s.name;
+  document.getElementById('s-contact').value = s.contact_person || '';
+  document.getElementById('s-phone').value = s.phone || '';
+  document.getElementById('s-email').value = s.email || '';
+  document.getElementById('s-address').value = s.address || '';
+  document.getElementById('s-status').value = s.status;
+  document.getElementById('supplier-modal-title').textContent = 'Edit Supplier';
+  document.getElementById('supplier-form-error').classList.add('hidden');
+  openModal('supplier-modal');
+}
+document.getElementById('supplier-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errEl = document.getElementById('supplier-form-error');
+  errEl.classList.add('hidden');
+  const body = {
+    id: document.getElementById('s-id').value || undefined,
+    name: document.getElementById('s-name').value.trim(),
+    contact_person: document.getElementById('s-contact').value.trim(),
+    phone: document.getElementById('s-phone').value.trim(),
+    email: document.getElementById('s-email').value.trim(),
+    address: document.getElementById('s-address').value.trim(),
+    status: document.getElementById('s-status').value,
+  };
+  try {
+    const r = await fetch(API_BASE + '/supplier_save.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to save supplier.');
+    closeModal('supplier-modal');
+    log('SUCCESS', 'Supplier "' + body.name + '" saved.');
+    loadSuppliers(); loadSuppliersIntoSelects();
+  } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+});
+
+// ================= MOVEMENT HISTORY =================
+async function loadMovements() {
+  try {
+    const r = await fetch(API_BASE + '/inventory_movements.php', FETCH_OPTS);
+    const payload = await r.json();
+    if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load movement history.');
+    renderMovements(payload.movements);
+  } catch (e) { log('ERROR', e.message); }
+}
+const MOVE_TYPE_COLORS = { Sale:'text-rose-400', Refund:'text-emerald-400', Receiving:'text-emerald-400', Purchase:'text-emerald-400', Adjustment:'text-amber-400', 'Stock In':'text-emerald-400', 'Stock Out':'text-rose-400' };
+function renderMovements(rows) {
+  const body = document.getElementById('movements-body');
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">No inventory movements yet.</td></tr>'; return; }
+  body.innerHTML = rows.map(m => `
+    <tr>
+      <td class="px-4 py-3 font-mono text-xs text-slate-500">${escapeHtml((m.created_at||'').slice(0,16))}</td>
+      <td class="px-4 py-3 text-white">${escapeHtml(m.product_name || m.sku)}</td>
+      <td class="px-4 py-3 font-mono text-xs text-slate-400">${escapeHtml(m.sku)}</td>
+      <td class="px-4 py-3 font-semibold ${MOVE_TYPE_COLORS[m.movement_type]||'text-slate-300'}">${escapeHtml(m.movement_type)}</td>
+      <td class="px-4 py-3 text-right font-mono ${m.quantity < 0 ? 'text-rose-400' : 'text-emerald-400'}">${m.quantity > 0 ? '+' : ''}${m.quantity}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-400">${m.previous_stock} → ${m.new_stock}</td>
+      <td class="px-4 py-3 font-mono text-xs text-slate-500">${escapeHtml(m.reference_id || '—')}</td>
+      <td class="px-4 py-3 text-slate-400">${escapeHtml(m.performed_by || '—')}</td>
+    </tr>`).join('');
+}
+</script>
+</body>
+</html>

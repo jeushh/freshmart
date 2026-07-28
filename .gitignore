@@ -1,0 +1,7 @@
+apps/api/.env
+apps/api/vendor/
+apps/web/.env
+apps/web/node_modules/
+apps/web/dist/
+database/backups/*.sqlite
+apps/api/storage/logs/*.log

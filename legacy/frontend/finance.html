@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshMart — Finance</title>
+  <script src="tailwind.js"></script>
+  <script src="auth-guard.js"></script>
+  <script src="data-navigation.js" defer></script>
+  <style>
+    ::-webkit-scrollbar{width:7px;height:7px}::-webkit-scrollbar-track{background:#090d16}::-webkit-scrollbar-thumb{background:#334155;border-radius:8px}
+  </style>
+</head>
+<body class="min-h-screen bg-gray-950 font-sans text-slate-200">
+  <div id="finance-app" class="hidden">
+  <header class="border-b border-slate-800 bg-slate-900/90 px-5 py-4 shadow-xl sm:px-8">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">💰</span>
+        <div>
+          <h1 class="text-lg font-bold text-white">FreshMart <span class="text-emerald-400">Finance</span></h1>
+          <p class="font-mono text-[11px] text-slate-500">FINANCE DASHBOARD</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="finance-user-display" class="hidden items-center gap-1.5 font-mono text-xs text-slate-400 sm:flex">👤 <span id="finance-user-name"></span></span>
+        <button id="finance-logout-btn" type="button" class="rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300 transition hover:border-rose-700 hover:text-rose-400">Log Out</button>
+      </div>
+    </div>
+  </header>
+
+  <nav aria-label="Finance section navigation" class="sticky top-0 z-30 border-b border-slate-800 bg-gray-950/95 px-5 py-3 backdrop-blur sm:px-8">
+    <div class="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto">
+      <a href="#finance-mgmt-section" class="shrink-0 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400">Finance Dashboard</a>
+      <a href="#finance-requests-section" class="shrink-0 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-emerald-500 hover:text-emerald-400">Finance Requests</a>
+      <span class="ml-auto shrink-0 text-xs text-slate-500">Tables are paginated automatically.</span>
+    </div>
+  </nav>
+
+  <main class="mx-auto max-w-7xl px-5 py-6 sm:px-8">
+
+    <!-- ===================== NEW: FINANCE MANAGEMENT (finance.manage) ===================== -->
+    <section id="finance-mgmt-section" class="scroll-mt-24 hidden mb-6 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <div>
+          <h2 class="text-xl font-semibold text-white">Finance Management</h2>
+          <p class="mt-1 text-sm text-slate-500">Dashboard, transactions, expenses, and accounts payable.</p>
+        </div>
+        <div class="flex flex-wrap gap-2" id="fm-tab-bar">
+          <button data-fmtab="dashboard" class="fm-tab-btn rounded-lg border border-emerald-600 bg-emerald-950 px-3 py-2 font-mono text-xs text-emerald-400">Dashboard</button>
+          <button data-fmtab="transactions" class="fm-tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300">Transactions</button>
+          <button data-fmtab="expenses" class="fm-tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300">Expenses</button>
+          <button data-fmtab="payable" class="fm-tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300">Accounts Payable</button>
+        </div>
+      </div>
+
+      <div class="p-5">
+        <!-- Dashboard -->
+        <div id="fm-panel-dashboard" class="fm-panel">
+          <div id="fm-kpi-grid" class="grid grid-cols-2 gap-3 md:grid-cols-4"></div>
+        </div>
+
+        <!-- Transactions -->
+        <div id="fm-panel-transactions" class="fm-panel hidden">
+          <div class="mb-3 flex flex-wrap items-center gap-2">
+            <select id="fm-txn-type" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">
+              <option value="">All Types</option>
+              <option>Sale</option><option>Refund</option><option>Purchase</option>
+              <option value="Supplier Payment">Supplier Payment</option><option>Payroll</option><option>Expense</option><option>Adjustment</option>
+            </select>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-slate-800">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-950 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                <tr><th class="px-4 py-3 text-left">Date</th><th class="px-4 py-3 text-left">Type</th><th class="px-4 py-3 text-left">Description</th><th class="px-4 py-3 text-left">Direction</th><th class="px-4 py-3 text-right">Amount</th><th class="px-4 py-3 text-left">By</th></tr>
+              </thead>
+              <tbody id="fm-txn-body" class="divide-y divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Expenses -->
+        <div id="fm-panel-expenses" class="fm-panel hidden">
+          <div class="mb-3 flex justify-end">
+            <button id="fm-add-expense-btn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">+ New Expense</button>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-slate-800">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-950 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                <tr><th class="px-4 py-3 text-left">Category</th><th class="px-4 py-3 text-left">Description</th><th class="px-4 py-3 text-right">Amount</th><th class="px-4 py-3 text-left">Requested By</th><th class="px-4 py-3 text-left">Status</th><th class="px-4 py-3 text-left">Payment</th><th class="px-4 py-3"></th></tr>
+              </thead>
+              <tbody id="fm-expense-body" class="divide-y divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Accounts Payable -->
+        <div id="fm-panel-payable" class="fm-panel hidden">
+          <div class="overflow-x-auto rounded-xl border border-slate-800">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-950 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                <tr><th class="px-4 py-3 text-left">Supplier</th><th class="px-4 py-3 text-left">PO #</th><th class="px-4 py-3 text-right">Total</th><th class="px-4 py-3 text-right">Paid</th><th class="px-4 py-3 text-right">Balance</th><th class="px-4 py-3 text-left">Due</th><th class="px-4 py-3 text-left">Status</th><th class="px-4 py-3"></th></tr>
+              </thead>
+              <tbody id="fm-ap-body" class="divide-y divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-5 py-4">
+        <div>
+          <h2 class="text-xl font-semibold text-white">Finance Requests</h2>
+          <p class="mt-1 text-sm text-slate-500">Reimbursements and purchase requests.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="fin-status-filter" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            <option value="">All Statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Paid">Paid</option>
+          </select>
+          <select id="fin-type-filter" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            <option value="">All Types</option>
+            <option value="Reimbursement">Reimbursement</option>
+            <option value="Purchase">Purchase</option>
+          </select>
+          <button id="new-finance-request-btn" type="button" class="hidden rounded-lg bg-emerald-500 px-3 py-2 font-mono text-xs font-bold text-slate-950 transition hover:bg-emerald-400">+ New Request</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-950 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-5 py-4">Employee</th>
+              <th class="px-4 py-4">Type</th>
+              <th class="px-4 py-4 text-right">Amount</th>
+              <th class="px-4 py-4">Category</th>
+              <th class="px-4 py-4">Description</th>
+              <th class="px-4 py-4">Status</th>
+              <th class="px-4 py-4">Reviewed By</th>
+              <th class="px-5 py-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="finance-requests-table" class="divide-y divide-slate-800">
+            <tr><td colspan="8" class="px-5 py-8 text-center font-mono text-slate-500">Loading requests…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div id="finance-request-form-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+      <div class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+          <p class="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">Finance</p>
+          <h3 class="text-lg font-bold text-white">New Finance Request</h3>
+        </div>
+        <div class="px-6 py-5 space-y-3">
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Employee</label>
+            <select id="fin-form-employee" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"></select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Request Type</label>
+              <select id="fin-form-type" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+                <option>Reimbursement</option>
+                <option>Purchase</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Amount (₱)</label>
+              <input id="fin-form-amount" type="number" min="0.01" step="0.01" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Category <span class="normal-case text-slate-600">(optional)</span></label>
+            <input id="fin-form-category" type="text" placeholder="e.g. Travel, Supplies, Equipment" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Description</label>
+            <textarea id="fin-form-description" rows="2" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"></textarea>
+          </div>
+          <p id="fin-form-error" class="hidden text-sm text-rose-400"></p>
+        </div>
+        <div class="flex gap-2 px-6 pb-6 border-t border-slate-800 pt-4">
+          <button id="fin-form-cancel" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Cancel</button>
+          <button id="fin-form-save" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition uppercase tracking-wider">Submit Request</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="fin-review-notes-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+      <div class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+          <p class="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">Finance Review</p>
+          <h3 id="fin-review-modal-title" class="text-lg font-bold text-white">Approve Request</h3>
+        </div>
+        <div class="px-6 py-5 space-y-3">
+          <input type="hidden" id="fin-review-request-id">
+          <input type="hidden" id="fin-review-decision">
+          <div>
+            <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1">Notes <span class="normal-case text-slate-600">(optional)</span></label>
+            <textarea id="fin-review-notes-input" rows="3" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none resize-none"></textarea>
+          </div>
+          <p id="fin-review-modal-error" class="hidden text-sm text-rose-400"></p>
+        </div>
+        <div class="flex gap-2 px-6 pb-6 border-t border-slate-800 pt-4">
+          <button id="fin-review-modal-cancel" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Cancel</button>
+          <button id="fin-review-modal-confirm" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition uppercase tracking-wider">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="mt-6 overflow-hidden rounded-xl border border-slate-800 bg-[#090d16] shadow-xl">
+      <div class="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-3">
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-xs font-semibold tracking-wider text-emerald-400">›_ EVENT LOGGER</span>
+          <span id="log-count" class="rounded-full bg-slate-800 border border-slate-700 px-2 py-0.5 font-mono text-[10px] text-slate-400">0 entries</span>
+        </div>
+        <button id="clear-log" class="rounded-lg border border-slate-700 px-3 py-1 font-mono text-[10px] text-slate-400 hover:bg-slate-800 hover:text-white transition">Clear</button>
+      </div>
+      <div id="event-log" class="max-h-48 overflow-y-auto px-4 py-3 space-y-1.5 font-mono text-[11px]"></div>
+    </section>
+
+  </main>
+  </div>
+
+  <!-- New Expense Modal -->
+  <div id="fm-expense-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6">
+      <h3 class="mb-4 text-lg font-semibold text-white">New Expense</h3>
+      <form id="fm-expense-form" class="grid gap-3">
+        <label class="text-xs text-slate-400">Category<input required id="fme-category" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" placeholder="e.g. Utilities, Rent, Maintenance"></label>
+        <label class="text-xs text-slate-400">Amount<input required type="number" min="0" step="0.01" id="fme-amount" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Description<textarea required id="fme-description" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></textarea></label>
+        <label class="text-xs text-slate-400">Expense Date<input type="date" id="fme-date" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <p id="fm-expense-error" class="hidden text-xs text-rose-400"></p>
+        <div class="mt-2 flex justify-end gap-2">
+          <button type="button" class="fm-modal-cancel rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+          <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Submit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Supplier Payment Modal -->
+  <div id="fm-pay-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+    <div class="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 p-6">
+      <h3 class="mb-1 text-lg font-semibold text-white">Record Supplier Payment</h3>
+      <p id="fm-pay-balance" class="mb-4 font-mono text-xs text-slate-500"></p>
+      <form id="fm-pay-form" class="grid gap-3">
+        <input type="hidden" id="fmp-id">
+        <label class="text-xs text-slate-400">Payment Amount<input required type="number" min="0.01" step="0.01" id="fmp-amount" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"></label>
+        <label class="text-xs text-slate-400">Payment Method
+          <select id="fmp-method" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option>Cash</option><option>Card</option><option>Wallet</option></select>
+        </label>
+        <p id="fm-pay-error" class="hidden text-xs text-rose-400"></p>
+        <div class="mt-2 flex justify-end gap-2">
+          <button type="button" class="fm-modal-cancel rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300">Cancel</button>
+          <button type="submit" class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500">Record Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const FM_API_BASE = '../backend';
+    const FM_FETCH_OPTS = { credentials: 'same-origin' };
+    function fmEscape(v) { return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    function fmCurrency(v) { return '₱' + Number(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    document.querySelectorAll('.fm-modal-cancel').forEach(btn => btn.addEventListener('click', () => {
+      btn.closest('.fixed').classList.add('hidden'); btn.closest('.fixed').classList.remove('flex');
+    }));
+    function fmOpenModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
+    function fmCloseModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); }
+
+    document.querySelectorAll('.fm-tab-btn').forEach(btn => btn.addEventListener('click', () => {
+      document.querySelectorAll('.fm-tab-btn').forEach(b => b.className = 'fm-tab-btn rounded-lg border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300');
+      btn.className = 'fm-tab-btn rounded-lg border border-emerald-600 bg-emerald-950 px-3 py-2 font-mono text-xs text-emerald-400';
+      document.querySelectorAll('.fm-panel').forEach(p => p.classList.toggle('hidden', p.id !== 'fm-panel-' + btn.dataset.fmtab));
+      if (btn.dataset.fmtab === 'dashboard') loadFmDashboard();
+      if (btn.dataset.fmtab === 'transactions') loadFmTransactions();
+      if (btn.dataset.fmtab === 'expenses') loadFmExpenses();
+      if (btn.dataset.fmtab === 'payable') loadFmPayable();
+    }));
+
+    async function initFinanceManagement() {
+      document.getElementById('finance-mgmt-section').classList.remove('hidden');
+      loadFmDashboard();
+    }
+
+    async function loadFmDashboard() {
+      try {
+        const r = await fetch(FM_API_BASE + '/finance_dashboard.php', FM_FETCH_OPTS);
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load dashboard.');
+        const d = payload.dashboard;
+        const cards = [
+          ['Total Sales', d.total_sales, 'text-emerald-400'],
+          ['Total Expenses', d.total_expenses, 'text-rose-400'],
+          ['Net Income', d.net_income, d.net_income >= 0 ? 'text-emerald-400' : 'text-rose-400'],
+          ['Inventory Value', d.inventory_value, 'text-cyan-400'],
+          ['Purchase Costs', d.purchase_costs, 'text-amber-400'],
+          ['Payroll Expenses', d.payroll_expenses, 'text-amber-400'],
+          ['Accounts Payable', d.accounts_payable, 'text-rose-400'],
+          ['Cash Balance', d.cash_balance, 'text-emerald-400'],
+        ];
+        document.getElementById('fm-kpi-grid').innerHTML = cards.map(([label, val, color]) =>
+          `<div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+            <p class="font-mono text-[10px] uppercase tracking-wider text-slate-500">${label}</p>
+            <p class="mt-2 text-xl font-bold ${color}">${fmCurrency(val)}</p>
+          </div>`).join('');
+        log('SYSTEM', 'Finance dashboard synchronized.');
+      } catch (e) { log('ERROR', e.message); }
+    }
+
+    document.getElementById('fm-txn-type').addEventListener('change', loadFmTransactions);
+    async function loadFmTransactions() {
+      try {
+        const type = document.getElementById('fm-txn-type').value;
+        const url = FM_API_BASE + '/financial_transactions.php' + (type ? '?type=' + encodeURIComponent(type) : '');
+        const r = await fetch(url, FM_FETCH_OPTS);
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load transactions.');
+        const body = document.getElementById('fm-txn-body');
+        body.innerHTML = payload.transactions.length ? payload.transactions.map(t => `
+          <tr><td class="px-4 py-3 font-mono text-xs text-slate-500">${fmEscape((t.created_at||'').slice(0,16))}</td>
+          <td class="px-4 py-3 text-white">${fmEscape(t.transaction_type)}</td>
+          <td class="px-4 py-3 text-slate-400">${fmEscape(t.description || '—')}</td>
+          <td class="px-4 py-3"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${t.direction === 'In' ? 'bg-emerald-950 text-emerald-400' : 'bg-rose-950 text-rose-400'}">${t.direction}</span></td>
+          <td class="px-4 py-3 text-right font-mono ${t.direction === 'In' ? 'text-emerald-400' : 'text-rose-400'}">${t.direction === 'In' ? '+' : '-'}${fmCurrency(t.amount)}</td>
+          <td class="px-4 py-3 text-slate-400">${fmEscape(t.created_by || '—')}</td></tr>`).join('')
+          : '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No transactions.</td></tr>';
+      } catch (e) { log('ERROR', e.message); }
+    }
+
+    async function loadFmExpenses() {
+      try {
+        const r = await fetch(FM_API_BASE + '/expenses.php', FM_FETCH_OPTS);
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load expenses.');
+        const body = document.getElementById('fm-expense-body');
+        body.innerHTML = payload.expenses.length ? payload.expenses.map(x => `
+          <tr><td class="px-4 py-3 text-white">${fmEscape(x.category)}</td>
+          <td class="px-4 py-3 text-slate-400">${fmEscape(x.description)}</td>
+          <td class="px-4 py-3 text-right font-mono text-slate-300">${fmCurrency(x.amount)}</td>
+          <td class="px-4 py-3 text-slate-400">${fmEscape(x.requested_by)}</td>
+          <td class="px-4 py-3"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${x.status === 'Approved' ? 'bg-emerald-950 text-emerald-400' : x.status === 'Rejected' ? 'bg-rose-950 text-rose-400' : 'bg-amber-950 text-amber-400'}">${x.status}</span></td>
+          <td class="px-4 py-3"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${x.payment_status === 'Paid' ? 'bg-emerald-950 text-emerald-400' : 'bg-slate-800 text-slate-400'}">${x.payment_status}</span></td>
+          <td class="px-4 py-3 text-right">${fmExpenseActions(x)}</td></tr>`).join('')
+          : '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No expenses yet.</td></tr>';
+        body.querySelectorAll('[data-expense-action]').forEach(btn => btn.addEventListener('click', () => fmReviewExpense(Number(btn.dataset.id), btn.dataset.expenseAction)));
+      } catch (e) { log('ERROR', e.message); }
+    }
+    function fmExpenseActions(x) {
+      if (x.status === 'Pending') return `<button data-expense-action="approve" data-id="${x.id}" class="mr-1 rounded bg-emerald-600 px-2 py-1 text-xs text-white">Approve</button><button data-expense-action="reject" data-id="${x.id}" class="rounded border border-rose-700 px-2 py-1 text-xs text-rose-400">Reject</button>`;
+      if (x.status === 'Approved' && x.payment_status === 'Unpaid') return `<button data-expense-action="mark_paid" data-id="${x.id}" class="rounded bg-amber-600 px-2 py-1 text-xs text-white">Mark Paid</button>`;
+      return '';
+    }
+    async function fmReviewExpense(id, action) {
+      try {
+        const r = await fetch(FM_API_BASE + '/expense_review.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action }) });
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to update expense.');
+        log('SUCCESS', 'Expense #' + id + ': ' + action);
+        loadFmExpenses(); loadFmDashboard();
+      } catch (e) { log('ERROR', e.message); }
+    }
+    document.getElementById('fm-add-expense-btn').addEventListener('click', () => {
+      document.getElementById('fm-expense-form').reset();
+      document.getElementById('fme-date').value = new Date().toISOString().slice(0,10);
+      document.getElementById('fm-expense-error').classList.add('hidden');
+      fmOpenModal('fm-expense-modal');
+    });
+    document.getElementById('fm-expense-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const errEl = document.getElementById('fm-expense-error');
+      errEl.classList.add('hidden');
+      const body = {
+        category: document.getElementById('fme-category').value.trim(),
+        amount: document.getElementById('fme-amount').value,
+        description: document.getElementById('fme-description').value.trim(),
+        expense_date: document.getElementById('fme-date').value,
+      };
+      try {
+        const r = await fetch(FM_API_BASE + '/expense_save.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to submit expense.');
+        fmCloseModal('fm-expense-modal');
+        log('SUCCESS', 'Expense submitted.');
+        loadFmExpenses();
+      } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+    });
+
+    async function loadFmPayable() {
+      try {
+        const r = await fetch(FM_API_BASE + '/accounts_payable.php', FM_FETCH_OPTS);
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to load accounts payable.');
+        const body = document.getElementById('fm-ap-body');
+        body.innerHTML = payload.payables.length ? payload.payables.map(ap => `
+          <tr><td class="px-4 py-3 text-white">${fmEscape(ap.supplier_name || '—')}</td>
+          <td class="px-4 py-3 font-mono text-xs text-slate-400">${fmEscape(ap.po_number || '—')}</td>
+          <td class="px-4 py-3 text-right font-mono text-slate-300">${fmCurrency(ap.total_amount)}</td>
+          <td class="px-4 py-3 text-right font-mono text-emerald-400">${fmCurrency(ap.amount_paid)}</td>
+          <td class="px-4 py-3 text-right font-mono text-rose-400">${fmCurrency(ap.balance)}</td>
+          <td class="px-4 py-3 text-slate-400">${fmEscape(ap.due_date || '—')}</td>
+          <td class="px-4 py-3"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${ap.display_status === 'Paid' ? 'bg-emerald-950 text-emerald-400' : ap.display_status === 'Overdue' ? 'bg-rose-950 text-rose-400' : 'bg-amber-950 text-amber-400'}">${ap.display_status}</span></td>
+          <td class="px-4 py-3 text-right">${ap.display_status !== 'Paid' ? `<button data-ap-pay='${JSON.stringify({id: ap.id, balance: ap.balance})}' class="rounded bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white">Pay</button>` : ''}</td></tr>`).join('')
+          : '<tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">No accounts payable records.</td></tr>';
+        body.querySelectorAll('[data-ap-pay]').forEach(btn => btn.addEventListener('click', () => openFmPayModal(JSON.parse(btn.dataset.apPay))));
+      } catch (e) { log('ERROR', e.message); }
+    }
+    function openFmPayModal(ap) {
+      document.getElementById('fmp-id').value = ap.id;
+      document.getElementById('fm-pay-balance').textContent = 'Remaining balance: ' + fmCurrency(ap.balance);
+      document.getElementById('fmp-amount').value = ap.balance;
+      document.getElementById('fmp-amount').max = ap.balance;
+      document.getElementById('fm-pay-error').classList.add('hidden');
+      fmOpenModal('fm-pay-modal');
+    }
+    document.getElementById('fm-pay-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const errEl = document.getElementById('fm-pay-error');
+      errEl.classList.add('hidden');
+      const body = { id: document.getElementById('fmp-id').value, amount: document.getElementById('fmp-amount').value, payment_method: document.getElementById('fmp-method').value };
+      try {
+        const r = await fetch(FM_API_BASE + '/accounts_payable_pay.php', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const payload = await r.json();
+        if (!r.ok || !payload.ok) throw new Error(payload.error || 'Failed to record payment.');
+        fmCloseModal('fm-pay-modal');
+        log('SUCCESS', 'Supplier payment recorded — status now ' + payload.status + '.');
+        loadFmPayable(); loadFmDashboard();
+      } catch (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+    });
+  </script>
+
+  <script>
+    const API_BASE = '../backend';
+    const FETCH_OPTS = { credentials: 'same-origin' };
+    const eventLog = document.getElementById('event-log');
+    let sessionPermissions = [];
+
+    function formatCurrency(amount) {
+      return '₱' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function log(type, message) {
+      const line = document.createElement('div');
+      line.className = 'flex items-center gap-2';
+      const stamp = new Date().toLocaleTimeString('en-US', { hour12: true });
+
+      const timeNode = document.createElement('span');
+      timeNode.className = 'shrink-0 text-slate-600 text-[10px]';
+      timeNode.textContent = stamp;
+
+      const badgeColors = {
+        SUCCESS: 'bg-emerald-950 text-emerald-400 border-emerald-900/50',
+        ERROR:   'bg-rose-950 text-rose-400 border-rose-900/50',
+        SYSTEM:  'bg-cyan-950 text-cyan-400 border-cyan-900/50',
+      };
+      const badgeClass = badgeColors[type] || 'bg-slate-800 text-slate-400 border-slate-700';
+
+      const typeNode = document.createElement('span');
+      typeNode.className = 'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold border ' + badgeClass;
+      typeNode.textContent = type;
+
+      const msgNode = document.createElement('span');
+      msgNode.className = 'text-slate-300';
+      msgNode.textContent = message;
+
+      line.append(timeNode, typeNode, msgNode);
+      eventLog.append(line);
+      eventLog.scrollTop = eventLog.scrollHeight;
+
+      const countEl = document.getElementById('log-count');
+      if (countEl) countEl.textContent = eventLog.children.length + ' entries';
+    }
+
+    document.getElementById('clear-log').addEventListener('click', () => {
+      eventLog.replaceChildren();
+      document.getElementById('log-count').textContent = '0 entries';
+    });
+
+    // ── FINANCE REQUESTS ─────────────────────────────────────────────────────
+    const finTable        = document.getElementById('finance-requests-table');
+    const finFormModal    = document.getElementById('finance-request-form-modal');
+    const finFormEmployee = document.getElementById('fin-form-employee');
+    const finFormType     = document.getElementById('fin-form-type');
+    const finFormAmount   = document.getElementById('fin-form-amount');
+    const finFormCategory = document.getElementById('fin-form-category');
+    const finFormDesc     = document.getElementById('fin-form-description');
+    const finFormError    = document.getElementById('fin-form-error');
+
+    const finReviewModal    = document.getElementById('fin-review-notes-modal');
+    const finReviewTitle    = document.getElementById('fin-review-modal-title');
+    const finReviewReqId    = document.getElementById('fin-review-request-id');
+    const finReviewDecision = document.getElementById('fin-review-decision');
+    const finReviewNotes    = document.getElementById('fin-review-notes-input');
+    const finReviewError    = document.getElementById('fin-review-modal-error');
+
+    const FIN_STATUS_BADGE = {
+      'Pending':  'bg-amber-950 text-amber-400 border-amber-900/50',
+      'Approved': 'bg-cyan-950 text-cyan-400 border-cyan-900/50',
+      'Rejected': 'bg-rose-950 text-rose-400 border-rose-900/50',
+      'Paid':     'bg-emerald-950 text-emerald-400 border-emerald-900/50',
+    };
+
+    async function populateEmployeeDropdown() {
+      finFormEmployee.replaceChildren();
+      try {
+        const r = await fetch(API_BASE + '/employees.php', FETCH_OPTS);
+        const d = await r.json();
+        (d.employees || []).forEach(e => {
+          const opt = document.createElement('option');
+          opt.value = e.id;
+          opt.textContent = e.employee_no + ' — ' + e.full_name;
+          finFormEmployee.append(opt);
+        });
+      } catch (_) {}
+    }
+
+    function openFinForm() {
+      finFormError.classList.add('hidden');
+      finFormType.value = 'Reimbursement';
+      finFormAmount.value = ''; finFormCategory.value = ''; finFormDesc.value = '';
+      finFormModal.classList.remove('hidden');
+    }
+    function closeFinForm() { finFormModal.classList.add('hidden'); }
+
+    document.getElementById('new-finance-request-btn').addEventListener('click', openFinForm);
+    document.getElementById('fin-form-cancel').addEventListener('click', closeFinForm);
+    finFormModal.addEventListener('click', e => { if (e.target === finFormModal) closeFinForm(); });
+
+    document.getElementById('fin-form-save').addEventListener('click', async () => {
+      finFormError.classList.add('hidden');
+      const payload = {
+        employee_id:  finFormEmployee.value,
+        request_type: finFormType.value,
+        amount:       finFormAmount.value,
+        category:     finFormCategory.value.trim(),
+        description:  finFormDesc.value.trim(),
+      };
+      try {
+        const response = await fetch(API_BASE + '/finance_request_submit.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          credentials: 'same-origin',
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Submit failed.');
+        closeFinForm();
+        loadFinanceRequests();
+        log('SUCCESS', 'Finance request submitted (ID ' + result.id + ').');
+      } catch (error) {
+        finFormError.textContent = error.message;
+        finFormError.classList.remove('hidden');
+      }
+    });
+
+    document.getElementById('fin-status-filter').addEventListener('change', () => loadFinanceRequests());
+    document.getElementById('fin-type-filter').addEventListener('change', () => loadFinanceRequests());
+
+    function openFinReviewModal(requestId, decision) {
+      finReviewReqId.value    = requestId;
+      finReviewDecision.value = decision;
+      finReviewTitle.textContent = decision === 'Approved' ? 'Approve Request' : decision === 'Rejected' ? 'Reject Request' : 'Mark as Paid';
+      const confirmBtn = document.getElementById('fin-review-modal-confirm');
+      confirmBtn.className = confirmBtn.className.replace(/bg-\S+|hover:bg-\S+/g, '').trim();
+      const colorClasses = decision === 'Approved' ? ['bg-cyan-500', 'hover:bg-cyan-400', 'text-slate-950']
+                          : decision === 'Rejected' ? ['bg-rose-500', 'hover:bg-rose-400', 'text-white']
+                          : ['bg-emerald-500', 'hover:bg-emerald-400', 'text-slate-950'];
+      confirmBtn.classList.add(...colorClasses);
+      finReviewNotes.value = '';
+      finReviewError.classList.add('hidden');
+      finReviewModal.classList.remove('hidden');
+    }
+    function closeFinReviewModal() { finReviewModal.classList.add('hidden'); }
+
+    document.getElementById('fin-review-modal-cancel').addEventListener('click', closeFinReviewModal);
+    finReviewModal.addEventListener('click', e => { if (e.target === finReviewModal) closeFinReviewModal(); });
+
+    document.getElementById('fin-review-modal-confirm').addEventListener('click', async () => {
+      finReviewError.classList.add('hidden');
+      try {
+        const response = await fetch(API_BASE + '/finance_request_review.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            request_id:   parseInt(finReviewReqId.value),
+            decision:     finReviewDecision.value,
+            review_notes: finReviewNotes.value.trim(),
+          }),
+          credentials: 'same-origin',
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Review failed.');
+        closeFinReviewModal();
+        loadFinanceRequests();
+        log('SUCCESS', 'Request #' + finReviewReqId.value + ' marked ' + finReviewDecision.value + '.');
+      } catch (error) {
+        finReviewError.textContent = error.message;
+        finReviewError.classList.remove('hidden');
+      }
+    });
+
+    async function loadFinanceRequests() {
+      const status = document.getElementById('fin-status-filter').value;
+      const type   = document.getElementById('fin-type-filter').value;
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (type) params.set('request_type', type);
+      const url = API_BASE + '/finance_requests.php' + (params.toString() ? '?' + params.toString() : '');
+      try {
+        const response = await fetch(url, FETCH_OPTS);
+        const data     = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Failed to load finance requests.');
+        finTable.replaceChildren();
+        if (data.requests.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 8; cell.className = 'px-5 py-8 text-center font-mono text-slate-500';
+          cell.textContent = 'No requests found.';
+          row.append(cell); finTable.append(row); return;
+        }
+        const canApprove = sessionPermissions.includes('finance.requests.approve');
+        data.requests.forEach(req => {
+          const row = document.createElement('tr');
+          row.className = 'transition hover:bg-slate-800/50';
+
+          const empTd = document.createElement('td');
+          empTd.className = 'px-5 py-4';
+          const nameSpan = document.createElement('div');
+          nameSpan.className = 'font-medium text-white'; nameSpan.textContent = req.employee_name || '—';
+          const noSpan = document.createElement('div');
+          noSpan.className = 'font-mono text-[10px] text-slate-500'; noSpan.textContent = req.employee_no || '';
+          empTd.append(nameSpan, noSpan);
+
+          const typeTd = document.createElement('td');
+          typeTd.className = 'px-4 py-4 text-slate-300'; typeTd.textContent = req.request_type;
+
+          const amountTd = document.createElement('td');
+          amountTd.className = 'px-4 py-4 text-right font-mono text-slate-200'; amountTd.textContent = formatCurrency(req.amount);
+
+          const categoryTd = document.createElement('td');
+          categoryTd.className = 'px-4 py-4 text-slate-400'; categoryTd.textContent = req.category || '—';
+
+          const descTd = document.createElement('td');
+          descTd.className = 'px-4 py-4 text-slate-400 max-w-xs truncate'; descTd.textContent = req.description;
+
+          const statusTd = document.createElement('td');
+          statusTd.className = 'px-4 py-4';
+          const badge = document.createElement('span');
+          badge.className = 'rounded px-2 py-0.5 text-[11px] font-bold border ' + (FIN_STATUS_BADGE[req.status] || 'bg-slate-800 text-slate-400 border-slate-700');
+          badge.textContent = req.status;
+          statusTd.append(badge);
+
+          const reviewerTd = document.createElement('td');
+          reviewerTd.className = 'px-4 py-4 text-xs text-slate-500';
+          reviewerTd.textContent = req.reviewer_name || '—';
+
+          const actionTd = document.createElement('td');
+          actionTd.className = 'px-5 py-4 text-right';
+          if (canApprove) {
+            const wrap = document.createElement('div');
+            wrap.className = 'flex justify-end gap-2';
+            if (req.status === 'Pending') {
+              const approveBtn = document.createElement('button');
+              approveBtn.type = 'button'; approveBtn.textContent = 'Approve';
+              approveBtn.className = 'rounded-lg border border-cyan-700 px-3 py-1.5 font-mono text-xs text-cyan-400 transition hover:bg-cyan-950';
+              approveBtn.addEventListener('click', () => openFinReviewModal(req.id, 'Approved'));
+              const rejectBtn = document.createElement('button');
+              rejectBtn.type = 'button'; rejectBtn.textContent = 'Reject';
+              rejectBtn.className = 'rounded-lg border border-rose-800 px-3 py-1.5 font-mono text-xs text-rose-400 transition hover:bg-rose-950';
+              rejectBtn.addEventListener('click', () => openFinReviewModal(req.id, 'Rejected'));
+              wrap.append(approveBtn, rejectBtn);
+            } else if (req.status === 'Approved') {
+              const paidBtn = document.createElement('button');
+              paidBtn.type = 'button'; paidBtn.textContent = 'Mark Paid';
+              paidBtn.className = 'rounded-lg border border-emerald-700 px-3 py-1.5 font-mono text-xs text-emerald-400 transition hover:bg-emerald-950';
+              paidBtn.addEventListener('click', () => openFinReviewModal(req.id, 'Paid'));
+              wrap.append(paidBtn);
+            }
+            actionTd.append(wrap);
+          }
+
+          row.append(empTd, typeTd, amountTd, categoryTd, descTd, statusTd, reviewerTd, actionTd);
+          finTable.append(row);
+        });
+        log('SYSTEM', 'Finance requests loaded: ' + data.requests.length + ' record(s).');
+      } catch (error) {
+        log('ERROR', error.message);
+      }
+    }
+
+    // ── BOOTSTRAP ────────────────────────────────────────────────────────────
+    (async () => {
+      const session = await guardPage(['finance.requests.view', 'finance.manage']);
+      if (!session) return; // guardPage() already redirected away
+
+      sessionPermissions = session.permissions || [];
+      const userDisplay = document.getElementById('finance-user-display');
+      const userNameEl  = document.getElementById('finance-user-name');
+      if (userDisplay && userNameEl) {
+        userNameEl.textContent = session.full_name || session.username;
+        userDisplay.classList.remove('hidden');
+      }
+      document.getElementById('finance-logout-btn').addEventListener('click', logoutAndRedirect);
+
+      document.getElementById('finance-app').classList.remove('hidden');
+
+      if (sessionPermissions.includes('finance.manage')) {
+        initFinanceManagement();
+      }
+
+      await populateEmployeeDropdown();
+      loadFinanceRequests();
+    })();
+  </script>
+</body>
+</html>

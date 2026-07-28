@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshMart POS — Sign In</title>
+  <script src="tailwind.js"></script>
+</head>
+<body class="h-full text-gray-200 font-sans">
+  <div class="flex h-full items-center justify-center p-4">
+    <div class="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+      <div class="border-b border-slate-700 bg-slate-800 px-6 py-4">
+        <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">FreshMart POS</p>
+        <h2 class="mt-0.5 text-lg font-bold text-white">Sign In</h2>
+      </div>
+      <div class="px-6 py-5">
+        <form id="login-form" class="space-y-3">
+          <input id="login-username" type="text" autocomplete="username" placeholder="Username"
+                 class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Password"
+                 class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+          <p id="login-error" class="hidden text-sm text-rose-400"></p>
+          <button type="submit" id="login-submit" class="w-full rounded-lg bg-emerald-500 py-2 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50">Sign In</button>
+        </form>
+        <p class="mt-4 font-mono text-[10px] leading-relaxed text-slate-600">
+          Demo accounts —<br>
+          Cashier: <span class="text-slate-500">cashier / cashier123</span><br>
+          Operations Manager: <span class="text-slate-500">ops.manager / ops123</span><br>
+          Inventory Staff: <span class="text-slate-500">inventory.staff / inventory123</span><br>
+          HR Manager: <span class="text-slate-500">hr.manager / hr123</span><br>
+          Finance Manager: <span class="text-slate-500">finance.manager / finance123</span><br>
+          Employee (self-service): <span class="text-slate-500">employee / employee123</span><br>
+          System Administrator: <span class="text-slate-500">admin / (your configured password)</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '../backend';
+    const form       = document.getElementById('login-form');
+    const usernameEl = document.getElementById('login-username');
+    const passwordEl = document.getElementById('login-password');
+    const errorEl    = document.getElementById('login-error');
+    const submitBtn  = document.getElementById('login-submit');
+
+    // If a valid session already exists, skip the form and go straight to that
+    // role's landing page — no reason to re-login every time this page loads.
+    (async () => {
+      try {
+        const res = await fetch(API_BASE + '/admin_session.php', { credentials: 'same-origin' });
+        const session = await res.json();
+        if (session.authenticated) {
+          window.location.href = landingPageUrl(session.landing_page);
+        }
+      } catch (error) {
+        // Ignore — just show the login form as normal.
+      }
+    })();
+
+    function landingPageUrl(landingPage) {
+      switch (landingPage) {
+        case 'admin':    return 'admin.html';
+        case 'inventory': return 'inventory.html';
+        case 'hr':       return 'hr.html';
+        case 'finance':  return 'finance.html';
+        case 'employee': return 'employee.html';
+        case 'pos':
+        default:        return 'index.html';
+      }
+    }
+
+    function showError(message) {
+      errorEl.textContent = message;
+      errorEl.classList.remove('hidden');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.classList.add('hidden');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in…';
+
+      try {
+        const body = new URLSearchParams({
+          username: usernameEl.value.trim(),
+          password: passwordEl.value,
+        });
+        const res = await fetch(API_BASE + '/admin_login.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+          credentials: 'same-origin',
+        });
+        const result = await res.json();
+
+        if (!res.ok || !result.ok) {
+          showError(result.error || 'Invalid credentials.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In';
+          return;
+        }
+
+        window.location.href = landingPageUrl(result.landing_page);
+      } catch (error) {
+        showError('Could not reach the server. Please try again.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
+      }
+    });
+  </script>
+</body>
+</html>

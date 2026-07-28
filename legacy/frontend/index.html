@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreshMart POS - Enterprise Terminal</title>
+    <script src="tailwind.js"></script>
+    <script src="auth-guard.js"></script>
+    <style>
+        /* Modern dark theme scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0b0f19; }
+        ::-webkit-scrollbar-thumb { background: #1f293d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #374151; }
+    </style>
+</head>
+<body class="h-full text-gray-200 font-sans overflow-hidden">
+
+    <div class="flex h-full flex-col">
+        <header class="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-6 py-4 shadow-md">
+            <div class="flex items-center space-x-3">
+                <span class="text-2xl">🛒</span>
+                <h1 class="text-xl font-bold tracking-tight text-white">FreshMart <span class="text-emerald-500 text-lg font-medium">Point of Sale</span></h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div id="system-time" class="text-sm font-mono text-gray-400">00:00:00</div>
+                <div class="h-5 w-px bg-gray-800"></div>
+                <div class="flex items-center gap-2 text-xs font-mono text-gray-400">
+                    <span>👤</span>
+                    <span id="cashier-name-display">—</span>
+                </div>
+                <button id="pos-logout-btn" type="button" class="rounded-lg border border-gray-800 px-3 py-1.5 font-mono text-[11px] text-gray-400 transition hover:border-rose-700 hover:text-rose-400">Log Out</button>
+            </div>
+        </header>
+
+        <div class="flex flex-1 overflow-hidden">
+            
+            <main class="flex flex-1 flex-col bg-gray-950 p-6 overflow-hidden w-7/10">
+                <div class="mb-6 flex flex-col space-y-4 sm:flex-row sm:items-center sm:space-x-4 sm:space-y-0">
+                    <div class="relative flex-1">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </span>
+                        <input type="text" id="search-input" placeholder="Search product catalog by name or item SKU..." 
+                               class="w-full rounded-lg border border-gray-800 bg-gray-900 py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors">
+                    </div>
+                    <div id="category-pills" class="flex flex-wrap gap-2">
+                        </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto pr-1">
+                    <div id="product-grid" class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                        <div class="col-span-full py-12 text-center text-gray-500">Initialising system environment matrices...</div>
+                    </div>
+                </div>
+
+            </main>
+
+            <aside class="flex w-3/10 flex-col border-l border-gray-800 bg-gray-900 shadow-2xl">
+                <div class="border-b border-gray-800 p-4 bg-gray-850">
+                    <h2 class="text-md font-bold text-white uppercase tracking-wider flex items-center justify-between">
+                        <span>Current Active Order</span>
+                        <div class="flex items-center gap-2">
+                            <span id="cart-count-badge" class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-2.5 py-0.5 rounded-full font-mono">0 Items</span>
+                            <button id="clear-cart-btn" type="button" title="Void order" class="rounded border border-rose-900/50 bg-rose-950/30 px-2 py-0.5 font-mono text-[10px] text-rose-400 transition hover:bg-rose-900/50 hover:text-rose-300 disabled:opacity-30 disabled:pointer-events-none" disabled>✕ Void</button>
+                        </div>
+                    </h2>
+                </div>
+
+                <div id="cart-container" class="flex-1 overflow-y-auto p-4 space-y-3">
+                    <div class="flex flex-col items-center justify-center h-full text-gray-500 text-center space-y-2">
+                        <span class="text-3xl">🛒</span>
+                        <p class="text-sm">Transaction ledger empty.<br>Tap catalog components to queue entries.</p>
+                    </div>
+                </div>
+
+                <div class="border-t border-gray-800 bg-gray-950 p-4 space-y-4">
+                    <div>
+                        <label class="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                            <span>Senior Citizen / PWD Discount</span>
+                        </label>
+                        <select id="discount-type-select" class="mt-2 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none">
+                            <option value="None">None</option>
+                            <option value="SeniorCitizen">Senior Citizen (20% off + VAT-exempt)</option>
+                            <option value="PWD">PWD (20% off + VAT-exempt)</option>
+                        </select>
+                        <input id="discount-id-input" type="text" placeholder="Qualifying OSCA / PWD ID number" maxlength="40"
+                               class="mt-2 hidden w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none">
+                    </div>
+                    <div class="space-y-1.5 font-mono text-sm border-b border-gray-800 pb-3">
+                        <div class="flex justify-between text-gray-400"><span>Subtotal:</span><span id="summary-subtotal">₱0.00</span></div>
+                        <div id="summary-discount-row" class="hidden flex justify-between text-amber-400"><span>Discount (20%):</span><span id="summary-discount">-₱0.00</span></div>
+                        <div class="flex justify-between text-gray-400"><span id="summary-tax-label">VAT (12%):</span><span id="summary-tax">₱0.00</span></div>
+                        <div class="flex justify-between text-white font-bold text-lg pt-1"><span>TOTAL DUE:</span><span id="summary-total" class="text-emerald-400">₱0.00</span></div>
+                        <div id="cash-tendered-row" class="hidden pt-1 space-y-1">
+                            <div class="flex items-center justify-between gap-2">
+                                <label for="cash-tendered-input" class="text-xs text-gray-400 uppercase tracking-wider">Tendered:</label>
+                                <input id="cash-tendered-input" type="number" min="0" step="0.01" placeholder="0.00"
+                                       class="w-28 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-right font-mono text-sm text-white focus:border-emerald-500 focus:outline-none">
+                            </div>
+                            <div class="flex justify-between text-gray-400"><span>Change:</span><span id="summary-change" class="font-mono text-amber-400">₱0.00</span></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Select Payment Method</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button type="button" data-method="Cash" class="payment-method-btn flex flex-col items-center justify-center p-2 rounded-lg bg-gray-900 border border-gray-800 text-gray-300 hover:border-gray-700 transition-all active-gateway">
+                                <span class="text-lg">💵</span><span class="text-[10px] font-medium mt-1">Cash</span>
+                            </button>
+                            <button type="button" data-method="Card" class="payment-method-btn flex flex-col items-center justify-center p-2 rounded-lg bg-gray-900 border border-gray-800 text-gray-300 hover:border-gray-700 transition-all">
+                                <span class="text-lg">💳</span><span class="text-[10px] font-medium mt-1">Card</span>
+                            </button>
+                            <button type="button" data-method="Wallet" class="payment-method-btn flex flex-col items-center justify-center p-2 rounded-lg bg-gray-900 border border-gray-800 text-gray-300 hover:border-gray-700 transition-all">
+                                <span class="text-lg">📱</span><span class="text-[10px] font-medium mt-1">E-Wallet</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="pt-2">
+                        <button id="pay-now-btn" disabled class="w-full py-3 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-800 disabled:text-gray-600 border disabled:border-transparent border-emerald-500/20 shadow-lg shadow-emerald-950/20 text-white transition-all transform active:scale-95 disabled:pointer-events-none uppercase tracking-wider">Settled Pay</button>
+                    </div>
+                    <button id="refunds-nav-btn" type="button" class="hidden w-full rounded-lg border border-slate-800 bg-slate-900 py-2 font-mono text-[11px] tracking-wider text-slate-500 transition hover:border-amber-700 hover:text-amber-400">🔄 PROCESS REFUND</button>
+                    <button id="restock-nav-btn" type="button" onclick="window.location.href = 'inventory.html';" class="hidden w-full rounded-lg border border-slate-800 bg-slate-900 py-2 font-mono text-[11px] tracking-wider text-slate-500 transition hover:border-amber-700 hover:text-amber-400">⚠️ REPORT LOW STOCK</button>
+                    <button id="admin-nav-btn" type="button" onclick="window.location.href = 'admin.html';" class="hidden w-full rounded-lg border border-slate-800 bg-slate-900 py-2 font-mono text-[11px] tracking-wider text-slate-500 transition hover:border-emerald-700 hover:text-emerald-400">ADMIN</button>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="custom-confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
+        <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+            <!-- Header -->
+            <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+                <p class="text-xs font-mono uppercase tracking-widest text-slate-500 mb-1">Payment Confirmation</p>
+                <h3 class="text-lg font-bold text-white">Confirm Transaction</h3>
+            </div>
+            <!-- Item breakdown -->
+            <div id="confirm-items-list" class="px-6 pt-4 space-y-1.5 max-h-36 overflow-y-auto"></div>
+            <!-- Summary -->
+            <div class="px-6 py-4 space-y-2">
+                <div class="flex justify-between text-xs text-slate-500 border-t border-slate-800 pt-3">
+                    <span>Subtotal</span>
+                    <span id="confirm-subtotal" class="font-mono">₱0.00</span>
+                </div>
+                <div class="flex justify-between text-xs text-slate-500">
+                    <span>VAT (12%)</span>
+                    <span id="confirm-vat" class="font-mono">₱0.00</span>
+                </div>
+                <div class="flex justify-between items-center border-t border-slate-700 pt-3 mt-1">
+                    <span class="text-sm font-bold text-white">Total Due</span>
+                    <span id="confirm-total" class="font-mono font-bold text-emerald-400 text-2xl">₱0.00</span>
+                </div>
+                <div class="flex justify-between items-center pt-1">
+                    <span class="text-xs text-slate-500">Payment Method</span>
+                    <span id="confirm-payment-method" class="font-mono text-sm font-semibold text-white">—</span>
+                </div>
+            </div>
+            <!-- Actions -->
+            <div class="flex gap-2 px-6 pb-6 border-t border-slate-800 pt-4">
+                <button id="modal-cancel-btn" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Cancel</button>
+                <button id="modal-confirm-btn" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-sm transition uppercase tracking-wider disabled:opacity-50 disabled:pointer-events-none">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Void Order Modal -->
+    <div id="void-confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
+        <div class="w-full max-w-sm bg-slate-900 border border-rose-900/50 rounded-2xl shadow-2xl overflow-hidden">
+            <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+                <p class="text-xs font-mono uppercase tracking-widest text-rose-400 mb-1">Void Order</p>
+                <h3 class="text-lg font-bold text-white">Cancel Current Order?</h3>
+            </div>
+            <div class="px-6 py-5">
+                <p class="text-sm text-slate-400">All items in the cart will be removed. This cannot be undone.</p>
+            </div>
+            <div class="flex gap-2 px-6 pb-6">
+                <button id="void-cancel-btn" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Keep Order</button>
+                <button id="void-confirm-btn" type="button" class="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm transition uppercase tracking-wider">Void Order</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Digital Receipt Modal -->
+    <div id="receipt-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm">
+        <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl font-mono text-xs text-slate-300 overflow-hidden">
+            <!-- Header -->
+            <div class="bg-emerald-500/10 border-b border-dashed border-slate-800 px-6 py-5 text-center">
+                <h3 class="text-base font-bold text-emerald-400 uppercase tracking-widest">🛒 FRESHMART POS</h3>
+                <p class="text-slate-500 text-[10px] mt-0.5">Store Branch #1402, Cavite</p>
+                <p class="text-emerald-400 text-[10px] mt-2 font-semibold tracking-wider">✓ TRANSACTION SUCCESSFUL</p>
+            </div>
+
+            <div class="px-6 py-4 space-y-4">
+                <!-- Order meta -->
+                <div class="flex justify-between text-[11px] text-slate-400">
+                    <span id="receipt-date">Date: --</span>
+                    <span id="receipt-id" class="text-slate-500">INV-####</span>
+                </div>
+
+                <!-- Items -->
+                <div class="border-y border-dashed border-slate-800 py-3">
+                    <div class="flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                        <span>Item</span><span>Qty / Price</span>
+                    </div>
+                    <div id="receipt-items-list" class="space-y-2 max-h-40 overflow-y-auto pr-1"></div>
+                </div>
+
+                <!-- Totals -->
+                <div class="space-y-1.5 text-[11px]">
+                    <div class="flex justify-between text-slate-500"><span>Subtotal:</span><span id="receipt-subtotal">₱0.00</span></div>
+                    <div class="flex justify-between text-slate-500"><span>VAT (12%):</span><span id="receipt-vat">₱0.00</span></div>
+                    <div class="flex justify-between text-base font-bold text-emerald-400 pt-1 border-t border-slate-800">
+                        <span>TOTAL DUE:</span><span id="receipt-total">₱0.00</span>
+                    </div>
+                    <div id="receipt-cash-row" class="hidden space-y-1 pt-1 border-t border-slate-800">
+                        <div class="flex justify-between text-slate-500"><span>Cash Tendered:</span><span id="receipt-tendered">₱0.00</span></div>
+                        <div class="flex justify-between font-semibold text-amber-400"><span>Change:</span><span id="receipt-change">₱0.00</span></div>
+                    </div>
+                </div>
+
+                <!-- Payment method -->
+                <div class="flex justify-between text-[11px] border-t border-dashed border-slate-800 pt-3">
+                    <span class="text-slate-500">Payment Method:</span>
+                    <span id="receipt-payment-method" class="text-white font-semibold">—</span>
+                </div>
+
+                <!-- Thank you -->
+                <p class="text-center text-[10px] text-slate-500 border-t border-dashed border-slate-800 pt-3">Thank you for buying local! 🛒<br>Please come again.</p>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex gap-2 px-6 pb-5">
+                <button id="copy-order-id-btn" type="button" class="py-2.5 px-3 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold transition text-center uppercase tracking-wider">📋 Copy ID</button>
+                <button id="print-hardware-btn" type="button" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition text-center uppercase tracking-wider">🖨️ Print</button>
+                <button id="close-receipt-btn" type="button" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold transition text-center uppercase tracking-wider">New Order</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="receipt-print-area" class="hidden"></div>
+
+    <style>
+        .active-gateway { border-color: #10b981 !important; background-color: rgba(16, 185, 129, 0.05) !important; color: #34d399 !important; font-weight: 600; }
+
+        @media print {
+            @page { size: 80mm auto; margin: 0; }
+
+            body * { visibility: hidden; }
+
+            #receipt-print-area, #receipt-print-area * {
+                visibility: visible;
+            }
+
+            #receipt-print-area {
+                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 80mm;
+                margin: 0 auto;
+                padding: 4mm;
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 11px;
+                line-height: 1.4;
+                white-space: pre-wrap;
+                color: #000 !important;
+                background: #fff !important;
+            }
+        }
+    </style>
+    <!-- Refund Modal -->
+    <div id="refund-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="px-6 pt-6 pb-4 border-b border-slate-800">
+                <p class="text-xs font-mono uppercase tracking-widest text-amber-400 mb-1">Process Refund</p>
+                <h3 class="text-lg font-bold text-white">Look Up Order</h3>
+            </div>
+            <div class="px-6 py-4 space-y-3 overflow-y-auto flex-1">
+                <div class="flex gap-2">
+                    <input id="refund-order-id-input" type="text" placeholder="Order ID (e.g. ORD-20260726-...)"
+                           class="flex-1 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none">
+                    <button id="refund-lookup-btn" type="button" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-600">Look Up</button>
+                </div>
+                <p id="refund-lookup-error" class="hidden text-sm text-rose-400"></p>
+                <div id="refund-lines-container" class="hidden space-y-2">
+                    <div class="grid grid-cols-12 gap-2 text-[10px] font-mono uppercase tracking-wider text-slate-500 px-1">
+                        <span class="col-span-5">Item</span>
+                        <span class="col-span-3 text-center">Sold / Refundable</span>
+                        <span class="col-span-4 text-right">Refund Qty</span>
+                    </div>
+                    <div id="refund-lines-list" class="space-y-2"></div>
+                    <div>
+                        <label class="block text-xs font-mono uppercase tracking-wider text-slate-500 mb-1 mt-3">Reason</label>
+                        <textarea id="refund-reason-input" rows="2" placeholder="e.g. Customer changed mind, defective item"
+                                  class="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none resize-none"></textarea>
+                    </div>
+                    <p id="refund-submit-error" class="hidden text-sm text-rose-400"></p>
+                </div>
+            </div>
+            <div class="flex gap-2 px-6 pb-6 pt-4 border-t border-slate-800">
+                <button id="refund-modal-close" type="button" class="flex-1 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-400 font-semibold text-sm transition uppercase tracking-wider">Close</button>
+                <button id="refund-submit-btn" type="button" class="hidden flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition uppercase tracking-wider">Process Refund</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
