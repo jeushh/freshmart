@@ -27,7 +27,7 @@ function homePath() {
     admin: ['/admin', 'system.users.manage|system.roles.manage|system.audit.view|system.settings.manage'],
     pos: ['/pos', 'pos.access'],
     hr: ['/employees', 'hr.employees.view'],
-    finance: ['/finance', 'finance.manage'],
+    finance: ['/finance', 'finance.requests.view|finance.manage'],
     employee: ['/self-service', 'employee.self'],
     inventory: ['/inventory', 'inventory.manage|restock.approve']
   }[state.landingPage]

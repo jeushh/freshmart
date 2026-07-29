@@ -46,7 +46,12 @@ class ProductController extends Controller
             'category' => 'required|string|max:80',
             'price' => 'required|numeric|min:0',
             'cost_price' => 'required|numeric|min:0',
-            'stock_quantity' => 'required|integer|min:0',
+            'stock_quantity' => [
+                Rule::prohibitedIf($id !== null),
+                'sometimes',
+                'integer',
+                'min:0',
+            ],
             'reorder_level' => 'required|integer|min:0',
             'unit' => 'required|string|max:20',
             'supplier_id' => 'nullable|integer|exists:suppliers,id',

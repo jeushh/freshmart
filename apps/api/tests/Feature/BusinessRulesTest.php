@@ -66,6 +66,50 @@ class BusinessRulesTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_product_updates_cannot_change_stock_but_creation_can_set_initial_stock(): void
+    {
+        $this->actingAs(User::where('username', 'inventory')->firstOrFail());
+        $product = DB::table('products')->first();
+        $update = [
+            'sku' => $product->sku,
+            'name' => $product->name.' Updated',
+            'category' => $product->category,
+            'price' => $product->price,
+            'cost_price' => $product->cost_price,
+            'reorder_level' => $product->reorder_level,
+            'unit' => $product->unit,
+            'supplier_id' => $product->supplier_id,
+            'status' => $product->status,
+        ];
+
+        $this->putJson("/api/workspace/products/{$product->id}", $update)->assertOk();
+        $this->assertSame(
+            $product->stock_quantity,
+            DB::table('products')->where('id', $product->id)->value('stock_quantity'),
+        );
+
+        $this->putJson("/api/workspace/products/{$product->id}", $update + [
+            'stock_quantity' => $product->stock_quantity + 25,
+        ])->assertUnprocessable();
+        $this->assertSame(
+            $product->stock_quantity,
+            DB::table('products')->where('id', $product->id)->value('stock_quantity'),
+        );
+
+        $this->postJson('/api/workspace/products', [
+            'sku' => 'INITIAL-STOCK-TEST',
+            'name' => 'Initial Stock Test',
+            'category' => 'Test',
+            'price' => 10,
+            'cost_price' => 5,
+            'stock_quantity' => 7,
+            'reorder_level' => 2,
+            'unit' => 'pc',
+            'status' => 'Active',
+        ])->assertCreated();
+        $this->assertSame(7, DB::table('products')->where('sku', 'INITIAL-STOCK-TEST')->value('stock_quantity'));
+    }
+
     public function test_dashboard_uses_real_schema_and_hides_unauthorized_metrics(): void
     {
         $this->actingAs(User::where('username', 'admin')->firstOrFail());
@@ -136,15 +180,56 @@ class BusinessRulesTest extends TestCase
             'status' => 'Pending',
         ]);
 
-        $this->postJson("/api/workspace/finance/{$requestId}/review", ['decision' => 'Paid'])->assertStatus(409);
-        $this->postJson("/api/workspace/finance/{$requestId}/review", ['decision' => 'Approved'])->assertOk();
-        $this->postJson("/api/workspace/finance/{$requestId}/review", ['decision' => 'Paid'])->assertOk();
-        $this->postJson("/api/workspace/finance/{$requestId}/review", ['decision' => 'Paid'])->assertStatus(409);
+        $this->postJson("/api/workspace/finance/requests/{$requestId}/review", ['decision' => 'Paid'])->assertStatus(409);
+        $this->postJson("/api/workspace/finance/requests/{$requestId}/review", ['decision' => 'Approved'])->assertOk();
+        $this->postJson("/api/workspace/finance/requests/{$requestId}/review", ['decision' => 'Paid'])->assertOk();
+        $this->postJson("/api/workspace/finance/requests/{$requestId}/review", ['decision' => 'Paid'])->assertStatus(409);
 
         $this->assertSame(1, DB::table('financial_transactions')
             ->where('reference_type', 'finance_request')
             ->where('reference_id', (string) $requestId)
             ->count());
+    }
+
+    public function test_finance_request_view_permission_is_read_only(): void
+    {
+        $requestId = $this->createFinanceRequest();
+        $this->actingAs($this->userWithPermissions('finance-view-test', ['finance.requests.view']));
+
+        $this->getJson('/api/workspace/finance/requests')
+            ->assertOk()
+            ->assertJsonPath('requests.data.0.id', $requestId);
+        $this->getJson('/api/workspace/finance/overview')->assertForbidden();
+        $this->postJson("/api/workspace/finance/requests/{$requestId}/review", [
+            'decision' => 'Approved',
+        ])->assertForbidden();
+        $this->assertSame('Pending', DB::table('finance_requests')->where('id', $requestId)->value('status'));
+    }
+
+    public function test_finance_request_approval_permission_can_review_without_broad_finance_access(): void
+    {
+        $requestId = $this->createFinanceRequest();
+        $this->actingAs($this->userWithPermissions('finance-approve-test', ['finance.requests.approve']));
+
+        $this->postJson("/api/workspace/finance/requests/{$requestId}/review", [
+            'decision' => 'Approved',
+        ])->assertOk();
+        $this->assertSame('Approved', DB::table('finance_requests')->where('id', $requestId)->value('status'));
+        $this->getJson('/api/workspace/finance/requests')->assertForbidden();
+        $this->getJson('/api/workspace/finance/overview')->assertForbidden();
+    }
+
+    public function test_finance_manage_does_not_grant_request_read_or_approval_permissions(): void
+    {
+        $requestId = $this->createFinanceRequest();
+        $this->actingAs($this->userWithPermissions('finance-manage-test', ['finance.manage']));
+
+        $this->getJson('/api/workspace/finance/overview')->assertOk();
+        $this->getJson('/api/workspace/finance/requests')->assertForbidden();
+        $this->postJson("/api/workspace/finance/requests/{$requestId}/review", [
+            'decision' => 'Approved',
+        ])->assertForbidden();
+        $this->assertSame('Pending', DB::table('finance_requests')->where('id', $requestId)->value('status'));
     }
 
     public function test_self_service_rejects_cross_kind_request_types_and_zero_finance_amounts(): void
@@ -225,5 +310,35 @@ class BusinessRulesTest extends TestCase
             'status' => 'Active',
             'password' => 'correct-horse-battery-staple',
         ])->assertUnprocessable();
+    }
+
+    private function userWithPermissions(string $username, array $permissions): User
+    {
+        $roleId = DB::table('roles')->insertGetId([
+            'name' => $username.' role',
+            'permissions' => json_encode($permissions, JSON_THROW_ON_ERROR),
+            'landing_page' => 'finance',
+        ]);
+        $userId = DB::table('admin_users')->insertGetId([
+            'username' => $username,
+            'password_hash' => 'not-used',
+            'full_name' => $username,
+            'role_id' => $roleId,
+            'status' => 'Active',
+        ]);
+
+        return User::findOrFail($userId);
+    }
+
+    private function createFinanceRequest(): int
+    {
+        return DB::table('finance_requests')->insertGetId([
+            'employee_id' => 1,
+            'request_type' => 'Reimbursement',
+            'amount' => 125.50,
+            'category' => 'Reimbursement',
+            'description' => 'Permission test reimbursement',
+            'status' => 'Pending',
+        ]);
     }
 }

@@ -54,7 +54,12 @@ class BusinessController extends Controller
             'category' => 'required|string|max:80',
             'price' => 'required|numeric|min:0',
             'cost_price' => 'required|numeric|min:0',
-            'stock_quantity' => 'required|integer|min:0',
+            'stock_quantity' => [
+                Rule::prohibitedIf($id !== null),
+                'sometimes',
+                'integer',
+                'min:0',
+            ],
             'reorder_level' => 'required|integer|min:0',
             'unit' => 'required|string|max:20',
             'supplier_id' => 'nullable|integer|exists:suppliers,id',
@@ -108,7 +113,7 @@ class BusinessController extends Controller
         });
     }
 
-    public function finance(Request $request)
+    public function financeRequests(Request $request)
     {
         $request->validate(['per_page' => 'sometimes|integer|min:1|max:100']);
 
@@ -120,6 +125,12 @@ class BusinessController extends Controller
                     ->orderByDesc('finance_requests.id'),
                 $request,
             ),
+        ];
+    }
+
+    public function financeOverview()
+    {
+        return [
             'expenses' => DB::table('expenses')->orderByDesc('id')->limit(50)->get(),
             'transactions' => DB::table('financial_transactions')->orderByDesc('id')->limit(50)->get(),
         ];

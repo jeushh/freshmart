@@ -33,8 +33,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/workspace/products/{id}', [BusinessController::class, 'saveProduct'])->middleware('permission:inventory.manage');
     Route::post('/workspace/products/{id}/adjust', [BusinessController::class, 'adjustStock'])->middleware('permission:inventory.manage');
 
-    Route::get('/workspace/finance', [BusinessController::class, 'finance'])->middleware('permission:finance.manage');
-    Route::post('/workspace/finance/{id}/review', [BusinessController::class, 'reviewFinance'])->middleware('permission:finance.manage');
+    Route::get('/workspace/finance/requests', [BusinessController::class, 'financeRequests'])->middleware('permission:finance.requests.view');
+    Route::post('/workspace/finance/requests/{id}/review', [BusinessController::class, 'reviewFinance'])->middleware('permission:finance.requests.approve');
+    Route::get('/workspace/finance/overview', [BusinessController::class, 'financeOverview'])->middleware('permission:finance.manage');
 
     Route::get('/workspace/pos', [BusinessController::class, 'pos'])->middleware('permission:pos.access');
     Route::post('/workspace/pos/checkout', [BusinessController::class, 'checkout'])->middleware('permission:pos.access');
