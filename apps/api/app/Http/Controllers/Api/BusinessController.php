@@ -1,29 +1,406 @@
 <?php
+
 namespace App\Http\Controllers\Api;
+
 use App\Http\Controllers\Controller;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
-class BusinessController extends Controller {
- private function page($q, Request $r, int $default=20){return $q->paginate(min(100,max(1,$r->integer('per_page',$default))));}
- public function inventory(Request $r){
-  $q=DB::table('products')->leftJoin('suppliers','products.supplier_id','=','suppliers.id')->select('products.*','suppliers.name as supplier_name');
-  if($s=trim((string)$r->query('search','')))$q->where(fn($x)=>$x->where('products.name','like',"%$s%")->orWhere('products.sku','like',"%$s%"));
-  return response()->json(['products'=>$this->page($q->orderBy('products.name'),$r),'suppliers'=>DB::table('suppliers')->where('status','Active')->orderBy('name')->get(),'low_stock'=>DB::table('products')->whereColumn('stock_quantity','<=','reorder_level')->count()]);
- }
- public function saveProduct(Request $r, ?int $id=null){
-  $d=$r->validate(['sku'=>['required','string','max:60',Rule::unique('products','sku')->ignore($id)],'name'=>'required|string|max:150','category'=>'required|string|max:80','price'=>'required|numeric|min:0','cost_price'=>'required|numeric|min:0','stock_quantity'=>'required|integer|min:0','reorder_level'=>'required|integer|min:0','unit'=>'required|string|max:20','supplier_id'=>'nullable|integer','status'=>'required|in:Active,Inactive']);
-  if($id){DB::table('products')->where('id',$id)->update($d);return DB::table('products')->find($id);} $id=DB::table('products')->insertGetId($d+['emoji'=>'🛒']);return response()->json(DB::table('products')->find($id),201);
- }
- public function adjustStock(Request $r,int $id){$d=$r->validate(['quantity'=>'required|integer|not_in:0','notes'=>'nullable|string|max:300']);return DB::transaction(function()use($d,$id,$r){$p=DB::table('products')->where('id',$id)->first();abort_unless($p,404);$new=$p->stock_quantity+$d['quantity'];abort_if($new<0,422,'Stock cannot be negative.');DB::table('products')->where('id',$id)->update(['stock_quantity'=>$new]);DB::table('inventory_movements')->insert(['product_id'=>$id,'sku'=>$p->sku,'movement_type'=>'Adjustment','quantity'=>$d['quantity'],'previous_stock'=>$p->stock_quantity,'new_stock'=>$new,'performed_by'=>$r->user()->username,'notes'=>$d['notes']??null]);return ['stock_quantity'=>$new];});}
- public function finance(Request $r){return ['requests'=>$this->page(DB::table('finance_requests')->leftJoin('employees','finance_requests.employee_id','=','employees.id')->select('finance_requests.*','employees.full_name')->orderByDesc('finance_requests.id'),$r),'expenses'=>DB::table('expenses')->orderByDesc('id')->limit(50)->get(),'transactions'=>DB::table('financial_transactions')->orderByDesc('id')->limit(50)->get()];}
- public function reviewFinance(Request $r,int $id){$d=$r->validate(['decision'=>'required|in:Approved,Rejected,Paid','notes'=>'nullable|string|max:500']);$row=DB::table('finance_requests')->find($id);abort_unless($row,404);abort_if(in_array($row->status,['Rejected','Paid']),409,'Request is already final.');DB::table('finance_requests')->where('id',$id)->update(['status'=>$d['decision'],'reviewed_by'=>$r->user()->id,'reviewed_at'=>now()->format('Y-m-d H:i:s'),'review_notes'=>$d['notes']??null]);if($d['decision']==='Paid')DB::table('financial_transactions')->insert(['transaction_type'=>'Expense','amount'=>$row->amount,'direction'=>'Out','reference_type'=>'finance_request','reference_id'=>$id,'description'=>$row->description,'category'=>$row->category,'created_by'=>$r->user()->username]);return DB::table('finance_requests')->find($id);}
- public function pos(Request $r){$products=DB::table('products')->where('status','Active')->where('stock_quantity','>',0)->orderBy('name')->get();$sales=DB::table('sales_ledger')->orderByDesc('id')->limit(30)->get();return compact('products','sales');}
- public function checkout(Request $r){$d=$r->validate(['items'=>'required|array|min:1','items.*.product_id'=>'required|integer','items.*.quantity'=>'required|integer|min:1','payment_method'=>'required|in:Cash,Card,QR']);return DB::transaction(function()use($d,$r){$order='FM-'.now()->format('YmdHis').'-'.random_int(100,999);$total=0;foreach($d['items'] as $item){$p=DB::table('products')->where('id',$item['product_id'])->lockForUpdate()->first();abort_unless($p,404);abort_if($p->stock_quantity<$item['quantity'],422,"Insufficient stock for {$p->name}.");$line=$p->price*$item['quantity'];$total+=$line;$new=$p->stock_quantity-$item['quantity'];DB::table('products')->where('id',$p->id)->update(['stock_quantity'=>$new]);DB::table('sales_ledger')->insert(['order_id'=>$order,'item_sku'=>$p->sku,'quantity_sold'=>$item['quantity'],'total_price'=>$line,'payment_method'=>$d['payment_method'],'cashier_username'=>$r->user()->username]);DB::table('inventory_movements')->insert(['product_id'=>$p->id,'sku'=>$p->sku,'movement_type'=>'Sale','quantity'=>-$item['quantity'],'previous_stock'=>$p->stock_quantity,'new_stock'=>$new,'reference_id'=>$order,'performed_by'=>$r->user()->username]);}DB::table('financial_transactions')->insert(['transaction_type'=>'Sale','amount'=>$total,'direction'=>'In','reference_type'=>'sale','reference_id'=>$order,'description'=>'POS sale','payment_method'=>$d['payment_method'],'created_by'=>$r->user()->username]);return ['order_id'=>$order,'total'=>round($total,2)];});}
- public function admin(Request $r){return ['users'=>DB::table('admin_users')->join('roles','admin_users.role_id','=','roles.id')->select('admin_users.id','admin_users.username','admin_users.full_name','admin_users.status','admin_users.last_login','roles.name as role_name')->orderBy('admin_users.username')->get(),'roles'=>DB::table('roles')->orderBy('name')->get(),'settings'=>DB::table('system_settings')->orderBy('setting_key')->get(),'audit'=>DB::table('audit_logs')->orderByDesc('id')->limit(100)->get()];}
- public function saveUser(Request $r,?int $id=null){$d=$r->validate(['username'=>['required','string','max:60',Rule::unique('admin_users','username')->ignore($id)],'full_name'=>'required|string|max:120','role_id'=>'required|integer','status'=>'required|in:Active,Disabled','password'=>'nullable|string|min:8']);$password=$d['password']??null;unset($d['password']);if($password)$d['password_hash']=Hash::make($password);if($id){DB::table('admin_users')->where('id',$id)->update($d);return DB::table('admin_users')->find($id);}abort_unless($password,422,'Password is required for a new account.');$d['created_at']=now()->format('Y-m-d H:i:s');$id=DB::table('admin_users')->insertGetId($d);return response()->json(DB::table('admin_users')->find($id),201);}
- public function self(Request $r){$u=$r->user();abort_unless($u->employee_id,422,'This account is not linked to an employee.');return ['profile'=>DB::table('employees')->find($u->employee_id),'hr_requests'=>DB::table('hr_requests')->where('employee_id',$u->employee_id)->orderByDesc('id')->get(),'finance_requests'=>DB::table('finance_requests')->where('employee_id',$u->employee_id)->orderByDesc('id')->get(),'attendance'=>DB::table('attendance_logs')->where('employee_id',$u->employee_id)->orderByDesc('log_date')->limit(30)->get()];}
- public function submitSelf(Request $r){$u=$r->user();abort_unless($u->employee_id,422,'This account is not linked to an employee.');$d=$r->validate(['kind'=>'required|in:hr,finance','request_type'=>'required|string','reason'=>'required|string|max:500','amount'=>'nullable|numeric|min:0','start_date'=>'nullable|date','end_date'=>'nullable|date']);if($d['kind']==='hr'){$id=DB::table('hr_requests')->insertGetId(['employee_id'=>$u->employee_id,'request_type'=>$d['request_type'],'start_date'=>$d['start_date']??null,'end_date'=>$d['end_date']??null,'reason'=>$d['reason'],'status'=>'Pending']);}else{$id=DB::table('finance_requests')->insertGetId(['employee_id'=>$u->employee_id,'request_type'=>$d['request_type'],'amount'=>$d['amount']??0,'description'=>$d['reason'],'status'=>'Pending']);}return response()->json(['id'=>$id],201);}
+class BusinessController extends Controller
+{
+    private function page($query, Request $request, int $default = 20)
+    {
+        return $query->paginate(min(100, max(1, $request->integer('per_page', $default))));
+    }
+
+    public function inventory(Request $request)
+    {
+        $request->validate([
+            'search' => 'sometimes|string|max:120',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+        ]);
+        $query = DB::table('products')
+            ->leftJoin('suppliers', 'products.supplier_id', '=', 'suppliers.id')
+            ->select('products.*', 'suppliers.name as supplier_name');
+
+        if ($search = trim((string) $request->query('search', ''))) {
+            $query->where(fn ($item) => $item
+                ->where('products.name', 'like', "%{$search}%")
+                ->orWhere('products.sku', 'like', "%{$search}%"));
+        }
+
+        return response()->json([
+            'products' => $this->page($query->orderBy('products.name'), $request),
+            'suppliers' => DB::table('suppliers')->where('status', 'Active')->orderBy('name')->get(),
+            'low_stock' => DB::table('products')
+                ->where('status', 'Active')
+                ->whereColumn('stock_quantity', '<=', 'reorder_level')
+                ->count(),
+        ]);
+    }
+
+    public function saveProduct(Request $request, ?int $id = null)
+    {
+        if ($id !== null) {
+            abort_unless(DB::table('products')->where('id', $id)->exists(), 404);
+        }
+
+        $data = $request->validate([
+            'sku' => ['required', 'string', 'max:60', Rule::unique('products', 'sku')->ignore($id)],
+            'name' => 'required|string|max:150',
+            'category' => 'required|string|max:80',
+            'price' => 'required|numeric|min:0',
+            'cost_price' => 'required|numeric|min:0',
+            'stock_quantity' => [
+                Rule::prohibitedIf($id !== null),
+                'sometimes',
+                'integer',
+                'min:0',
+            ],
+            'reorder_level' => 'required|integer|min:0',
+            'unit' => 'required|string|max:20',
+            'supplier_id' => 'nullable|integer|exists:suppliers,id',
+            'status' => 'required|in:Active,Inactive',
+        ]);
+
+        if ($id !== null) {
+            DB::table('products')->where('id', $id)->update($data);
+            AuditLogger::record($request, 'product.updated', 'product', $id);
+
+            return DB::table('products')->find($id);
+        }
+
+        $id = DB::table('products')->insertGetId($data + ['emoji' => '🛒']);
+        AuditLogger::record($request, 'product.created', 'product', $id);
+
+        return response()->json(DB::table('products')->find($id), 201);
+    }
+
+    public function adjustStock(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'quantity' => 'required|integer|not_in:0',
+            'notes' => 'nullable|string|max:300',
+        ]);
+
+        return DB::transaction(function () use ($data, $id, $request) {
+            $product = DB::table('products')->where('id', $id)->lockForUpdate()->first();
+            abort_unless($product, 404);
+            $newStock = $product->stock_quantity + $data['quantity'];
+            abort_if($newStock < 0, 422, 'Stock cannot be negative.');
+
+            DB::table('products')->where('id', $id)->update(['stock_quantity' => $newStock]);
+            DB::table('inventory_movements')->insert([
+                'product_id' => $id,
+                'sku' => $product->sku,
+                'movement_type' => 'Adjustment',
+                'quantity' => $data['quantity'],
+                'previous_stock' => $product->stock_quantity,
+                'new_stock' => $newStock,
+                'performed_by' => $request->user()->username,
+                'notes' => $data['notes'] ?? null,
+            ]);
+            AuditLogger::record($request, 'inventory.adjusted', 'product', $id, [
+                'quantity' => $data['quantity'],
+                'previous_stock' => $product->stock_quantity,
+                'new_stock' => $newStock,
+            ]);
+
+            return ['stock_quantity' => $newStock];
+        });
+    }
+
+    public function financeRequests(Request $request)
+    {
+        $request->validate(['per_page' => 'sometimes|integer|min:1|max:100']);
+
+        return [
+            'requests' => $this->page(
+                DB::table('finance_requests')
+                    ->leftJoin('employees', 'finance_requests.employee_id', '=', 'employees.id')
+                    ->select('finance_requests.*', 'employees.full_name')
+                    ->orderByDesc('finance_requests.id'),
+                $request,
+            ),
+        ];
+    }
+
+    public function financeOverview()
+    {
+        return [
+            'expenses' => DB::table('expenses')->orderByDesc('id')->limit(50)->get(),
+            'transactions' => DB::table('financial_transactions')->orderByDesc('id')->limit(50)->get(),
+        ];
+    }
+
+    public function reviewFinance(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'decision' => 'required|in:Approved,Rejected,Paid',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        return DB::transaction(function () use ($data, $id, $request) {
+            $row = DB::table('finance_requests')->where('id', $id)->lockForUpdate()->first();
+            abort_unless($row, 404);
+
+            $allowed = $data['decision'] === 'Paid'
+                ? $row->status === 'Approved'
+                : $row->status === 'Pending';
+            abort_unless($allowed, 409, "Finance request cannot move from {$row->status} to {$data['decision']}.");
+
+            DB::table('finance_requests')->where('id', $id)->update([
+                'status' => $data['decision'],
+                'reviewed_by' => $request->user()->id,
+                'reviewed_at' => now()->format('Y-m-d H:i:s'),
+                'review_notes' => $data['notes'] ?? null,
+            ]);
+
+            if ($data['decision'] === 'Paid') {
+                DB::table('financial_transactions')->insert([
+                    'transaction_type' => 'Expense',
+                    'amount' => $row->amount,
+                    'direction' => 'Out',
+                    'reference_type' => 'finance_request',
+                    'reference_id' => (string) $id,
+                    'description' => $row->description,
+                    'category' => $row->category,
+                    'created_by' => $request->user()->username,
+                ]);
+            }
+
+            AuditLogger::record($request, 'finance_request.'.strtolower($data['decision']), 'finance_request', $id, [
+                'previous_status' => $row->status,
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            return DB::table('finance_requests')->find($id);
+        });
+    }
+
+    public function pos()
+    {
+        return [
+            'products' => DB::table('products')
+                ->where('status', 'Active')
+                ->where('stock_quantity', '>', 0)
+                ->orderBy('name')
+                ->get(),
+            'sales' => DB::table('sales_ledger')->orderByDesc('id')->limit(30)->get(),
+        ];
+    }
+
+    public function checkout(Request $request)
+    {
+        $data = $request->validate([
+            'items' => 'required|array|min:1|max:100',
+            'items.*.product_id' => 'required|integer|distinct|exists:products,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'payment_method' => 'required|in:Cash,Card,QR',
+        ]);
+
+        return DB::transaction(function () use ($data, $request) {
+            $orderId = 'FM-'.now()->format('YmdHis').'-'.random_int(100, 999);
+            $total = 0;
+
+            foreach ($data['items'] as $item) {
+                $product = DB::table('products')->where('id', $item['product_id'])->lockForUpdate()->first();
+                abort_if($product->status !== 'Active', 422, "{$product->name} is not available for sale.");
+                abort_if($product->stock_quantity < $item['quantity'], 422, "Insufficient stock for {$product->name}.");
+
+                $lineTotal = round($product->price * $item['quantity'], 2);
+                $total += $lineTotal;
+                $newStock = $product->stock_quantity - $item['quantity'];
+
+                DB::table('products')->where('id', $product->id)->update(['stock_quantity' => $newStock]);
+                DB::table('sales_ledger')->insert([
+                    'order_id' => $orderId,
+                    'item_sku' => $product->sku,
+                    'quantity_sold' => $item['quantity'],
+                    'total_price' => $lineTotal,
+                    'payment_method' => $data['payment_method'],
+                    'cashier_username' => $request->user()->username,
+                ]);
+                DB::table('inventory_movements')->insert([
+                    'product_id' => $product->id,
+                    'sku' => $product->sku,
+                    'movement_type' => 'Sale',
+                    'quantity' => -$item['quantity'],
+                    'previous_stock' => $product->stock_quantity,
+                    'new_stock' => $newStock,
+                    'reference_id' => $orderId,
+                    'performed_by' => $request->user()->username,
+                ]);
+            }
+
+            $total = round($total, 2);
+            DB::table('financial_transactions')->insert([
+                'transaction_type' => 'Sale',
+                'amount' => $total,
+                'direction' => 'In',
+                'reference_type' => 'sale',
+                'reference_id' => $orderId,
+                'description' => 'POS sale',
+                'payment_method' => $data['payment_method'],
+                'created_by' => $request->user()->username,
+            ]);
+            AuditLogger::record($request, 'sale.completed', 'sale', $orderId, [
+                'total' => $total,
+                'payment_method' => $data['payment_method'],
+            ]);
+
+            return ['order_id' => $orderId, 'total' => $total];
+        });
+    }
+
+    public function admin(Request $request)
+    {
+        $user = $request->user()->loadMissing('role');
+
+        return [
+            'users' => $user->hasAnyPermission('system.users.manage')
+                ? DB::table('admin_users')
+                    ->join('roles', 'admin_users.role_id', '=', 'roles.id')
+                    ->select('admin_users.id', 'admin_users.username', 'admin_users.full_name', 'admin_users.status', 'admin_users.last_login', 'roles.name as role_name')
+                    ->orderBy('admin_users.username')
+                    ->get()
+                : [],
+            'roles' => $user->hasAnyPermission('system.roles.manage', 'system.users.manage')
+                ? DB::table('roles')->orderBy('name')->get()
+                : [],
+            'employees' => $user->hasAnyPermission('system.users.manage')
+                ? DB::table('employees')
+                    ->where('employment_status', '!=', 'Terminated')
+                    ->select('id', 'employee_no', 'full_name')
+                    ->orderBy('full_name')
+                    ->get()
+                : [],
+            'settings' => $user->hasAnyPermission('system.settings.manage')
+                ? DB::table('system_settings')->orderBy('setting_key')->get()
+                : [],
+            'audit' => $user->hasAnyPermission('system.audit.view')
+                ? DB::table('audit_logs')->orderByDesc('id')->limit(100)->get()
+                : [],
+        ];
+    }
+
+    public function saveUser(Request $request, ?int $id = null)
+    {
+        if ($id !== null) {
+            abort_unless(DB::table('admin_users')->where('id', $id)->exists(), 404);
+        }
+
+        $data = $request->validate([
+            'username' => ['required', 'string', 'max:60', Rule::unique('admin_users', 'username')->ignore($id)],
+            'full_name' => 'required|string|max:120',
+            'role_id' => 'required|integer|exists:roles,id',
+            'employee_id' => ['nullable', 'integer', 'exists:employees,id', Rule::unique('admin_users', 'employee_id')->ignore($id)],
+            'status' => 'required|in:Active,Disabled',
+            'password' => 'nullable|string|min:8|max:255',
+        ]);
+        $permissions = json_decode(
+            DB::table('roles')->where('id', $data['role_id'])->value('permissions'),
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        );
+        abort_if(
+            in_array('employee.self', $permissions, true) && empty($data['employee_id']),
+            422,
+            'An employee record is required for an employee self-service account.',
+        );
+        $password = $data['password'] ?? null;
+        unset($data['password']);
+
+        if ($password) {
+            $data['password_hash'] = Hash::make($password);
+        }
+
+        if ($id !== null) {
+            DB::table('admin_users')->where('id', $id)->update($data);
+            AuditLogger::record($request, 'user.updated', 'user', $id, ['username' => $data['username']]);
+
+            return $this->safeUser($id);
+        }
+
+        abort_unless($password, 422, 'Password is required for a new account.');
+        $data['created_at'] = now()->format('Y-m-d H:i:s');
+        $id = DB::table('admin_users')->insertGetId($data);
+        AuditLogger::record($request, 'user.created', 'user', $id, ['username' => $data['username']]);
+
+        return response()->json($this->safeUser($id), 201);
+    }
+
+    public function self(Request $request)
+    {
+        $user = $request->user();
+        abort_unless($user->employee_id, 422, 'This account is not linked to an employee.');
+        $profile = DB::table('employees')->find($user->employee_id);
+        abort_unless($profile, 422, 'The linked employee record no longer exists.');
+
+        return [
+            'profile' => $profile,
+            'hr_requests' => DB::table('hr_requests')->where('employee_id', $user->employee_id)->orderByDesc('id')->get(),
+            'finance_requests' => DB::table('finance_requests')->where('employee_id', $user->employee_id)->orderByDesc('id')->get(),
+            'attendance' => DB::table('attendance_logs')->where('employee_id', $user->employee_id)->orderByDesc('log_date')->limit(30)->get(),
+        ];
+    }
+
+    public function submitSelf(Request $request)
+    {
+        $user = $request->user();
+        abort_unless($user->employee_id, 422, 'This account is not linked to an employee.');
+        abort_unless(DB::table('employees')->where('id', $user->employee_id)->exists(), 422, 'The linked employee record no longer exists.');
+
+        $kind = $request->input('kind');
+        $requestType = $request->input('request_type');
+        $data = $request->validate([
+            'kind' => 'required|in:hr,finance',
+            'request_type' => [
+                'required',
+                Rule::when($kind === 'hr', Rule::in(['Leave', 'Overtime', 'Other'])),
+                Rule::when($kind === 'finance', Rule::in(['Reimbursement', 'Purchase'])),
+            ],
+            'reason' => 'required|string|max:500',
+            'amount' => [Rule::requiredIf($kind === 'finance'), 'nullable', 'numeric', 'min:0.01'],
+            'start_date' => [Rule::requiredIf($kind === 'hr' && $requestType === 'Leave'), 'nullable', 'date'],
+            'end_date' => [Rule::requiredIf($kind === 'hr' && $requestType === 'Leave'), 'nullable', 'date', 'after_or_equal:start_date'],
+            'hours' => [Rule::requiredIf($kind === 'hr' && $requestType === 'Overtime'), 'nullable', 'numeric', 'min:0.25'],
+        ]);
+
+        if ($data['kind'] === 'hr') {
+            $id = DB::table('hr_requests')->insertGetId([
+                'employee_id' => $user->employee_id,
+                'request_type' => $data['request_type'],
+                'start_date' => $data['start_date'] ?? null,
+                'end_date' => $data['end_date'] ?? null,
+                'hours' => $data['hours'] ?? null,
+                'reason' => $data['reason'],
+                'status' => 'Pending',
+            ]);
+            AuditLogger::record($request, 'hr_request.created', 'hr_request', $id);
+        } else {
+            $id = DB::table('finance_requests')->insertGetId([
+                'employee_id' => $user->employee_id,
+                'request_type' => $data['request_type'],
+                'amount' => $data['amount'],
+                'category' => $data['request_type'],
+                'description' => $data['reason'],
+                'status' => 'Pending',
+            ]);
+            AuditLogger::record($request, 'finance_request.created', 'finance_request', $id);
+        }
+
+        return response()->json(['id' => $id], 201);
+    }
+
+    private function safeUser(int $id)
+    {
+        return DB::table('admin_users')
+            ->where('id', $id)
+            ->select('id', 'username', 'full_name', 'role_id', 'employee_id', 'status', 'created_at', 'last_login')
+            ->first();
+    }
 }
