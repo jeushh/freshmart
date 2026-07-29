@@ -1,1 +1,3 @@
-<?php return ['default'=>env('BROADCAST_CONNECTION','null'),'connections'=>['null'=>['driver'=>'null']]];
+<?php
+
+return ['default' => env('BROADCAST_CONNECTION', 'null'), 'connections' => ['null' => ['driver' => 'null']]];

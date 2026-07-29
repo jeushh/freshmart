@@ -7,6 +7,9 @@ database/backups/*.sqlite
 apps/api/storage/logs/*.log
 apps/api/public/app/
 apps/api/.phpunit.result.cache
+apps/api/database/database.sqlite
+apps/api/database/database.sqlite-shm
+apps/api/database/database.sqlite-wal
 apps/public/
 database/*.sqlite-shm
 database/*.sqlite-wal

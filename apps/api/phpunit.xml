@@ -10,7 +10,12 @@
     </testsuites>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
+        <env name="DB_FOREIGN_KEYS" value="true"/>
+        <env name="FRESHMART_ADMIN_PASSWORD" value="testing-admin-password"/>
+        <env name="FRESHMART_DEMO_PASSWORD" value="testing-demo-password"/>
+        <env name="FRESHMART_SEED_DEMO" value="true"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
     </php>
