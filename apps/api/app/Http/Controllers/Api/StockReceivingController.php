@@ -17,7 +17,7 @@ class StockReceivingController extends Controller
             'due_date' => 'nullable|date',
             'items' => 'required|array|min:1|max:100',
             'items.*.purchase_order_item_id' => 'required|integer|distinct',
-            'items.*.received_quantity' => 'required|integer|min:0|max:100000',
+            'items.*.delivered_quantity' => 'required|integer|min:0|max:100000',
             'items.*.damaged_quantity' => 'sometimes|integer|min:0|max:100000',
             'items.*.rejected_quantity' => 'sometimes|integer|min:0|max:100000',
             'items.*.batch_no' => 'nullable|string|max:100',
@@ -43,17 +43,20 @@ class StockReceivingController extends Controller
 
             $prepared = [];
             foreach ($data['items'] as $item) {
-                $received = $item['received_quantity'];
+                $delivered = $item['delivered_quantity'];
                 $damaged = $item['damaged_quantity'] ?? 0;
                 $rejected = $item['rejected_quantity'] ?? 0;
                 abort_if(
-                    $damaged + $rejected > $received,
+                    $damaged + $rejected > $delivered,
                     422,
-                    'Damaged and rejected quantities cannot exceed the received quantity.',
+                    'Damaged and rejected quantities cannot exceed the delivered quantity.',
                 );
-                if ($received === 0) {
+                if ($delivered === 0) {
                     continue;
                 }
+                $accepted = $delivered - $damaged - $rejected;
+                // Only accepted units satisfy the supplier's purchase-order obligation.
+                $fulfilled = $accepted;
 
                 $line = DB::table('purchase_order_items')
                     ->where('id', $item['purchase_order_item_id'])
@@ -63,9 +66,9 @@ class StockReceivingController extends Controller
                 abort_unless($line, 422, 'A receiving line does not belong to this purchase order.');
                 $outstanding = $line->quantity_ordered - $line->quantity_received;
                 abort_if(
-                    $received > $outstanding,
+                    $fulfilled > $outstanding,
                     409,
-                    "Cannot receive {$received} of {$line->sku}; only {$outstanding} remain.",
+                    "Cannot fulfill {$fulfilled} of {$line->sku}; only {$outstanding} remain outstanding.",
                 );
                 $product = DB::table('products')
                     ->where('id', $line->product_id)
@@ -76,13 +79,14 @@ class StockReceivingController extends Controller
                     'input' => $item,
                     'line' => $line,
                     'product' => $product,
-                    'received' => $received,
+                    'delivered' => $delivered,
                     'damaged' => $damaged,
                     'rejected' => $rejected,
-                    'accepted' => $received - $damaged - $rejected,
+                    'accepted' => $accepted,
+                    'fulfilled' => $fulfilled,
                 ];
             }
-            abort_if($prepared === [], 422, 'At least one received quantity must be greater than zero.');
+            abort_if($prepared === [], 422, 'At least one delivered quantity must be greater than zero.');
 
             $receivingId = DB::table('stock_receivings')->insertGetId([
                 'purchase_order_id' => $purchaseOrder,
@@ -102,7 +106,8 @@ class StockReceivingController extends Controller
                     'purchase_order_item_id' => $line->id,
                     'product_id' => $product->id,
                     'sku' => $line->sku,
-                    'received_quantity' => $entry['received'],
+                    // This existing history column stores the physical delivery quantity.
+                    'received_quantity' => $entry['delivered'],
                     'damaged_quantity' => $entry['damaged'],
                     'rejected_quantity' => $entry['rejected'],
                     'batch_no' => $entry['input']['batch_no'] ?? null,
@@ -110,7 +115,7 @@ class StockReceivingController extends Controller
                     'unit_cost' => $line->unit_cost,
                 ]);
                 DB::table('purchase_order_items')->where('id', $line->id)->update([
-                    'quantity_received' => $line->quantity_received + $entry['received'],
+                    'quantity_received' => $line->quantity_received + $entry['fulfilled'],
                 ]);
 
                 $previousStock = $currentStocks[$product->id] ?? $product->stock_quantity;
@@ -135,10 +140,11 @@ class StockReceivingController extends Controller
                 $totalCost += $entry['accepted'] * $line->unit_cost;
                 $auditLines[] = [
                     'sku' => $product->sku,
-                    'received' => $entry['received'],
-                    'accepted' => $entry['accepted'],
-                    'damaged' => $entry['damaged'],
-                    'rejected' => $entry['rejected'],
+                    'delivered_quantity' => $entry['delivered'],
+                    'accepted_quantity' => $entry['accepted'],
+                    'fulfilled_quantity' => $entry['fulfilled'],
+                    'damaged_quantity' => $entry['damaged'],
+                    'rejected_quantity' => $entry['rejected'],
                     'previous_stock' => $previousStock,
                     'new_stock' => $newStock,
                 ];
@@ -147,10 +153,10 @@ class StockReceivingController extends Controller
             $totals = DB::table('purchase_order_items')
                 ->where('purchase_order_id', $purchaseOrder)
                 ->selectRaw(
-                    'SUM(quantity_ordered) as ordered, SUM(quantity_received) as received',
+                    'SUM(quantity_ordered) as ordered, SUM(quantity_received) as fulfilled',
                 )
                 ->first();
-            $newStatus = $totals->received >= $totals->ordered
+            $newStatus = $totals->fulfilled >= $totals->ordered
                 ? 'Fully Received'
                 : 'Partially Received';
             DB::table('purchase_orders')->where('id', $purchaseOrder)->update([

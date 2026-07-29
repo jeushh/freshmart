@@ -35,16 +35,17 @@ const formTotal = computed(() => form.value.items.reduce(
 const receivingValid = computed(() => {
   if (!selected.value) return false
   const entries = Object.values(receiving.value)
-  return entries.some(item => Number(item.received_quantity) > 0) && entries.every(item => {
+  return entries.some(item => Number(item.delivered_quantity) > 0) && entries.every(item => {
     const line = selected.value.items.find(candidate => candidate.id === item.purchase_order_item_id)
-    const received = Number(item.received_quantity || 0)
+    const delivered = Number(item.delivered_quantity || 0)
     const damaged = Number(item.damaged_quantity || 0)
     const rejected = Number(item.rejected_quantity || 0)
-    return received >= 0
-      && received <= Number(line?.outstanding_quantity || 0)
+    const accepted = delivered - damaged - rejected
+    return delivered >= 0
       && damaged >= 0
       && rejected >= 0
-      && damaged + rejected <= received
+      && accepted >= 0
+      && accepted <= Number(line?.outstanding_quantity || 0)
   })
 })
 const canCancelSelected = computed(() => {
@@ -126,7 +127,7 @@ async function open(id) {
     selected.value = await api.get(`/purchase-orders/${id}`)
     receiving.value = Object.fromEntries(selected.value.items.map(item => [
       item.id,
-      { purchase_order_item_id: item.id, received_quantity: 0, damaged_quantity: 0, rejected_quantity: 0 }
+      { purchase_order_item_id: item.id, delivered_quantity: 0, damaged_quantity: 0, rejected_quantity: 0 }
     ]))
   } catch (requestError) {
     error.value = requestError.message
@@ -163,6 +164,15 @@ async function transition(action, payload = {}) {
   } catch (requestError) {
     error.value = requestError.message
   }
+}
+
+function acceptedFor(item) {
+  return Math.max(
+    0,
+    Number(item.delivered_quantity || 0)
+      - Number(item.damaged_quantity || 0)
+      - Number(item.rejected_quantity || 0)
+  )
 }
 
 async function receiveStock() {
@@ -255,7 +265,7 @@ onMounted(load)
       { key: 'total_amount', label: 'Total' },
       { key: 'approval_status', label: 'Approval' },
       { key: 'status', label: 'Receiving' },
-      { key: 'total_received', label: 'Progress' },
+      { key: 'total_fulfilled', label: 'Fulfillment' },
       { key: 'expected_delivery_date', label: 'Expected' }
     ]"
     :rows="orders"
@@ -263,7 +273,7 @@ onMounted(load)
     <template #cell-total_amount="{ row }">{{ money(row.total_amount) }}</template>
     <template #cell-approval_status="{ row }"><span class="status-badge">{{ row.approval_status }}</span></template>
     <template #cell-status="{ row }"><span class="status-badge">{{ row.status }}</span></template>
-    <template #cell-total_received="{ row }">{{ row.total_received }} / {{ row.total_ordered }}</template>
+    <template #cell-total_fulfilled="{ row }">{{ row.total_fulfilled }} / {{ row.total_ordered }}</template>
     <template #actions="{ row }"><button @click="open(row.id)">Details</button></template>
   </WorkspaceTable>
 
@@ -303,7 +313,7 @@ onMounted(load)
         { key: 'sku', label: 'SKU' },
         { key: 'product_name', label: 'Product' },
         { key: 'quantity_ordered', label: 'Ordered' },
-        { key: 'quantity_received', label: 'Received' },
+        { key: 'fulfilled_quantity', label: 'Fulfilled' },
         { key: 'outstanding_quantity', label: 'Outstanding' },
         { key: 'current_stock', label: 'Current stock' },
         { key: 'unit_cost', label: 'Unit cost' },
@@ -323,27 +333,32 @@ onMounted(load)
       <h3>Receive stock</h3>
       <div v-for="item in selected.items" :key="item.id" class="receiving-line">
         <strong>{{ item.sku }} — {{ item.product_name }}</strong>
-        <span>{{ item.outstanding_quantity }} outstanding</span>
-        <label>Received<input v-model.number="receiving[item.id].received_quantity" type="number" min="0" :max="item.outstanding_quantity"></label>
-        <label>Damaged<input v-model.number="receiving[item.id].damaged_quantity" type="number" min="0" :max="receiving[item.id].received_quantity"></label>
-        <label>Rejected<input v-model.number="receiving[item.id].rejected_quantity" type="number" min="0" :max="receiving[item.id].received_quantity"></label>
+        <label>Outstanding<output>{{ item.outstanding_quantity }}</output></label>
+        <label>Delivered<input v-model.number="receiving[item.id].delivered_quantity" type="number" min="0"></label>
+        <label>Accepted<output>{{ acceptedFor(receiving[item.id]) }}</output></label>
+        <label>Damaged<input v-model.number="receiving[item.id].damaged_quantity" type="number" min="0" :max="receiving[item.id].delivered_quantity"></label>
+        <label>Rejected<input v-model.number="receiving[item.id].rejected_quantity" type="number" min="0" :max="receiving[item.id].delivered_quantity"></label>
       </div>
       <p v-if="!receivingValid" class="field-help">
-        Enter at least one valid received quantity. Damaged and rejected units together cannot exceed received units.
+        Enter at least one valid delivery. Accepted units cannot exceed the outstanding quantity, and damaged plus rejected units cannot exceed delivered units.
       </p>
       <button class="primary-button" :disabled="!receivingValid">Record receiving</button>
     </form>
 
     <h3 v-if="selected.receivings.length">Receiving history</h3>
-    <WorkspaceTable
-      v-if="selected.receivings.length"
-      :columns="[
-        { key: 'id', label: 'Receiving' },
-        { key: 'receiving_date', label: 'Date' },
-        { key: 'received_by', label: 'Received by' },
-        { key: 'notes', label: 'Notes' }
-      ]"
-      :rows="selected.receivings"
-    />
+    <article v-for="history in selected.receivings" :key="history.id" class="receiving-history">
+      <h4>Receiving #{{ history.id }} · {{ history.receiving_date }} · {{ history.received_by }}</h4>
+      <p v-if="history.notes">{{ history.notes }}</p>
+      <WorkspaceTable
+        :columns="[
+          { key: 'sku', label: 'SKU' },
+          { key: 'delivered_quantity', label: 'Delivered' },
+          { key: 'accepted_quantity', label: 'Accepted / fulfilled' },
+          { key: 'damaged_quantity', label: 'Damaged' },
+          { key: 'rejected_quantity', label: 'Rejected' }
+        ]"
+        :rows="history.items"
+      />
+    </article>
   </section>
 </template>

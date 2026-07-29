@@ -79,9 +79,10 @@ class PurchaseOrderController extends Controller
                 'products.unit',
             ])
             ->map(function ($item) {
+                $item->fulfilled_quantity = $item->quantity_received;
                 $item->outstanding_quantity = max(
                     0,
-                    $item->quantity_ordered - $item->quantity_received,
+                    $item->quantity_ordered - $item->fulfilled_quantity,
                 );
                 $item->line_total = round(
                     $item->quantity_ordered * $item->unit_cost,
@@ -98,7 +99,16 @@ class PurchaseOrderController extends Controller
                 $receiving->items = DB::table('stock_receiving_items')
                     ->where('stock_receiving_id', $receiving->id)
                     ->orderBy('id')
-                    ->get();
+                    ->get()
+                    ->map(function ($item) {
+                        $item->delivered_quantity = $item->received_quantity;
+                        $item->accepted_quantity = $item->delivered_quantity
+                            - $item->damaged_quantity
+                            - $item->rejected_quantity;
+                        $item->fulfilled_quantity = $item->accepted_quantity;
+
+                        return $item;
+                    });
 
                 return $receiving;
             });
@@ -492,7 +502,7 @@ class PurchaseOrderController extends Controller
                         'purchase_order_items.purchase_order_id',
                         'purchase_orders.id',
                     ),
-                'total_received',
+                'total_fulfilled',
             );
     }
 
