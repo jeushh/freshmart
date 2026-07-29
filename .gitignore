@@ -5,3 +5,8 @@ apps/web/node_modules/
 apps/web/dist/
 database/backups/*.sqlite
 apps/api/storage/logs/*.log
+apps/api/public/app/
+apps/api/.phpunit.result.cache
+apps/public/
+database/*.sqlite-shm
+database/*.sqlite-wal

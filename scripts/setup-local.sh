@@ -18,9 +18,11 @@ fi
 
 cd "$API"
 composer install
-php artisan key:generate --force
+if ! grep -Eq '^APP_KEY=base64:.+' "$API/.env"; then
+  php artisan key:generate
+fi
 php artisan config:clear
-php artisan cache:clear || true
+CACHE_STORE=file php artisan cache:clear
 
 if [ ! -f "$WEB/.env" ] && [ -f "$WEB/.env.example" ]; then
   cp "$WEB/.env.example" "$WEB/.env"
