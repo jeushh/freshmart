@@ -36,6 +36,10 @@ class RoleSeeder extends Seeder
                     'finance.requests.approve',
                     'finance.manage',
                     'employee.self',
+                    'procurement.purchase_orders.view',
+                    'procurement.purchase_orders.manage',
+                    'procurement.purchase_orders.approve',
+                    'procurement.stock.receive',
                 ],
             ],
             [
@@ -89,6 +93,8 @@ class RoleSeeder extends Seeder
                 'permissions' => [
                     'restock.approve',
                     'sales.view',
+                    'procurement.purchase_orders.view',
+                    'procurement.purchase_orders.approve',
                 ],
             ],
             [
@@ -98,6 +104,9 @@ class RoleSeeder extends Seeder
                 'permissions' => [
                     'inventory.manage',
                     'restock.request',
+                    'procurement.purchase_orders.view',
+                    'procurement.purchase_orders.manage',
+                    'procurement.stock.receive',
                 ],
             ],
         ];
@@ -112,6 +121,7 @@ class RoleSeeder extends Seeder
                         JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
                     ),
                     'landing_page' => $role['landing_page'],
+                    'is_system' => 1,
                 ],
             );
         }

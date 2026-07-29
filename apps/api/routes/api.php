@@ -5,7 +5,13 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BusinessController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\HrRequestController;
 use App\Http\Controllers\Api\PayrollController;
+use App\Http\Controllers\Api\PurchaseOrderController;
+use App\Http\Controllers\Api\RestockRequestController;
+use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\StockReceivingController;
+use App\Http\Controllers\Api\SystemSettingController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
@@ -24,6 +30,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attendance', [AttendanceController::class, 'index'])->middleware('permission:hr.attendance.view');
     Route::post('/attendance', [AttendanceController::class, 'store'])->middleware('permission:hr.attendance.edit');
 
+    Route::get('/hr/requests', [HrRequestController::class, 'index'])->middleware('permission:hr.requests.view');
+    Route::post('/hr/requests/{hrRequest}/review', [HrRequestController::class, 'review'])->middleware('permission:hr.requests.approve');
+
     Route::get('/payroll', [PayrollController::class, 'index'])->middleware('permission:payroll.manage');
     Route::post('/payroll', [PayrollController::class, 'store'])->middleware('permission:payroll.manage');
     Route::post('/payroll/{payroll}/review', [PayrollController::class, 'review'])->middleware('permission:payroll.manage');
@@ -32,6 +41,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/workspace/products', [BusinessController::class, 'saveProduct'])->middleware('permission:inventory.manage');
     Route::put('/workspace/products/{id}', [BusinessController::class, 'saveProduct'])->middleware('permission:inventory.manage');
     Route::post('/workspace/products/{id}/adjust', [BusinessController::class, 'adjustStock'])->middleware('permission:inventory.manage');
+
+    Route::get('/restock-requests', [RestockRequestController::class, 'index'])->middleware('permission:restock.request|restock.approve');
+    Route::post('/restock-requests', [RestockRequestController::class, 'store'])->middleware('permission:restock.request');
+    Route::post('/restock-requests/{restockRequest}/review', [RestockRequestController::class, 'review'])->middleware('permission:restock.approve');
+
+    Route::get('/purchase-orders', [PurchaseOrderController::class, 'index'])->middleware('permission:procurement.purchase_orders.view');
+    Route::get('/purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'show'])->middleware('permission:procurement.purchase_orders.view');
+    Route::post('/purchase-orders', [PurchaseOrderController::class, 'store'])->middleware('permission:procurement.purchase_orders.manage');
+    Route::put('/purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'update'])->middleware('permission:procurement.purchase_orders.manage');
+    Route::post('/purchase-orders/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit'])->middleware('permission:procurement.purchase_orders.manage');
+    Route::post('/purchase-orders/{purchaseOrder}/review', [PurchaseOrderController::class, 'review'])->middleware('permission:procurement.purchase_orders.approve');
+    Route::post('/purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel'])
+        ->middleware('permission:procurement.purchase_orders.manage|procurement.purchase_orders.approve');
+    Route::post('/purchase-orders/{purchaseOrder}/receive', [StockReceivingController::class, 'store'])
+        ->middleware('permission:procurement.stock.receive');
 
     Route::get('/workspace/finance/requests', [BusinessController::class, 'financeRequests'])->middleware('permission:finance.requests.view');
     Route::post('/workspace/finance/requests/{id}/review', [BusinessController::class, 'reviewFinance'])->middleware('permission:finance.requests.approve');
@@ -44,6 +68,13 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:system.users.manage|system.roles.manage|system.audit.view|system.settings.manage');
     Route::post('/workspace/users', [BusinessController::class, 'saveUser'])->middleware('permission:system.users.manage');
     Route::put('/workspace/users/{id}', [BusinessController::class, 'saveUser'])->middleware('permission:system.users.manage');
+
+    Route::get('/roles', [RoleController::class, 'index'])->middleware('permission:system.roles.manage');
+    Route::post('/roles', [RoleController::class, 'store'])->middleware('permission:system.roles.manage');
+    Route::put('/roles/{role}', [RoleController::class, 'update'])->middleware('permission:system.roles.manage');
+
+    Route::get('/settings', [SystemSettingController::class, 'index'])->middleware('permission:system.settings.manage');
+    Route::put('/settings', [SystemSettingController::class, 'update'])->middleware('permission:system.settings.manage');
 
     Route::get('/workspace/self', [BusinessController::class, 'self'])->middleware('permission:employee.self');
     Route::post('/workspace/self/request', [BusinessController::class, 'submitSelf'])->middleware('permission:employee.self');
