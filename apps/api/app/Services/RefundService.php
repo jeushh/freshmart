@@ -10,6 +10,21 @@ class RefundService
     public function create(Request $request, array $data): array
     {
         return DB::transaction(function () use ($request, $data) {
+            $saleReference = DB::table('sales_ledger')
+                ->where('order_id', $data['order_id'])
+                ->where('item_sku', $data['item_sku'])
+                ->select('product_id')
+                ->first();
+            abort_unless($saleReference, 404, 'The sale item was not found.');
+
+            $productQuery = DB::table('products');
+            $productId = $saleReference->product_id ?? null;
+            $productId === null
+                ? $productQuery->where('sku', $data['item_sku'])
+                : $productQuery->where('id', $productId);
+
+            // Canonical lock order: products first, then dependent ledger/refund rows.
+            $product = $productQuery->lockForUpdate()->first();
             $sales = DB::table('sales_ledger')
                 ->where('order_id', $data['order_id'])
                 ->where('item_sku', $data['item_sku'])
@@ -54,10 +69,6 @@ class RefundService
                 ? round($grossAmount - $previousRefundAmount, 2)
                 : round(($grossAmount / $soldQuantity) * $data['quantity'], 2);
 
-            $product = DB::table('products')
-                ->where('sku', $data['item_sku'])
-                ->lockForUpdate()
-                ->first();
             abort_unless($product, 422, 'The sold product no longer exists.');
             $newStock = $product->stock_quantity + $data['quantity'];
 

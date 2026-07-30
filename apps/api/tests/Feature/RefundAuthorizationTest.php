@@ -126,6 +126,68 @@ class RefundAuthorizationTest extends TestCase
         );
     }
 
+    public function test_refund_uses_sale_product_id_when_sku_is_reused(): void
+    {
+        $cashier = User::where('username', 'cashier')->firstOrFail();
+        $product = DB::table('products')->where('stock_quantity', '>', 0)->first();
+        $originalSku = $product->sku;
+        $originalStock = $product->stock_quantity;
+        $replacementStock = 9;
+        $this->actingAs($cashier);
+        $orderId = $this->checkout($product->id, 1);
+
+        $this->assertDatabaseHas('sales_ledger', [
+            'order_id' => $orderId,
+            'item_sku' => $originalSku,
+            'product_id' => $product->id,
+        ]);
+        DB::table('products')->where('id', $product->id)->update([
+            'sku' => "ARCHIVED-{$product->id}",
+            'status' => 'Inactive',
+        ]);
+        $replacementId = DB::table('products')->insertGetId([
+            'name' => "Replacement {$product->name}",
+            'sku' => $originalSku,
+            'price' => $product->price,
+            'category' => $product->category,
+            'stock_quantity' => $replacementStock,
+            'unit' => $product->unit,
+            'emoji' => $product->emoji,
+            'cost_price' => $product->cost_price,
+            'reorder_level' => $product->reorder_level,
+            'min_stock' => $product->min_stock,
+            'max_stock' => $product->max_stock,
+            'supplier_id' => $product->supplier_id,
+            'status' => 'Active',
+        ]);
+
+        $this->postJson('/api/workspace/pos/refunds', [
+            'order_id' => $orderId,
+            'item_sku' => $originalSku,
+            'quantity' => 1,
+            'reason' => 'Refund after the original SKU was reused.',
+        ])->assertCreated();
+
+        $this->assertSame(
+            $originalStock,
+            DB::table('products')->where('id', $product->id)->value('stock_quantity'),
+        );
+        $this->assertSame(
+            $replacementStock,
+            DB::table('products')->where('id', $replacementId)->value('stock_quantity'),
+        );
+        $this->assertDatabaseHas('inventory_movements', [
+            'product_id' => $product->id,
+            'movement_type' => 'Refund',
+            'reference_id' => $orderId,
+        ]);
+        $this->assertDatabaseMissing('inventory_movements', [
+            'product_id' => $replacementId,
+            'movement_type' => 'Refund',
+            'reference_id' => $orderId,
+        ]);
+    }
+
     private function checkout(int $productId, int $quantity): string
     {
         return $this->postJson('/api/workspace/pos/checkout', [

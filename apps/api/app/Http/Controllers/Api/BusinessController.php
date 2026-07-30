@@ -263,6 +263,7 @@ class BusinessController extends Controller
             $taxCents = 0;
 
             foreach ($data['items'] as $item) {
+                // Canonical lock order: products first, then dependent ledger/refund rows.
                 $product = DB::table('products')->where('id', $item['product_id'])->lockForUpdate()->first();
                 abort_if($product->status !== 'Active', 422, "{$product->name} is not available for sale.");
                 abort_if($product->stock_quantity < $item['quantity'], 422, "Insufficient stock for {$product->name}.");
@@ -279,6 +280,7 @@ class BusinessController extends Controller
                 DB::table('sales_ledger')->insert([
                     'order_id' => $orderId,
                     'item_sku' => $product->sku,
+                    'product_id' => $product->id,
                     'quantity_sold' => $item['quantity'],
                     'unit_price' => round((float) $product->price, 2),
                     'subtotal_amount' => $tax['subtotal'],
