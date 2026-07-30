@@ -1,5 +1,6 @@
 <script setup>
 import AppSidebar from '../components/navigation/AppSidebar.vue'
+import AppTopbar from '../components/navigation/AppTopbar.vue'
 import { useSidebarState } from '../composables/useSidebarState.js'
 
 const { collapsed, mobileOpen } = useSidebarState()
@@ -17,8 +18,9 @@ const { collapsed, mobileOpen } = useSidebarState()
 
     <div class="fm-shell__body">
       <header class="fm-shell__header">
-        <!-- Step 7 owns all top-header content. -->
-        <slot name="header"></slot>
+        <slot name="header">
+          <AppTopbar />
+        </slot>
       </header>
 
       <main id="main-content" class="fm-shell__main" tabindex="-1">

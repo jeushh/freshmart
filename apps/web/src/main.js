@@ -6,5 +6,6 @@ import './assets/base.css'
 import './assets/ui.css'
 import './assets/shell.css'
 import './assets/sidebar.css'
+import './assets/topbar.css'
 
 createApp(App).use(router).mount('#app')

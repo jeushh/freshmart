@@ -1,16 +1,16 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { navigationGroups } from '../../config/navigation.js'
+import { useLogout } from '../../composables/useLogout.js'
 import { useSidebarState } from '../../composables/useSidebarState.js'
 import { sessionStore } from '../../stores/session.js'
 import UiButton from '../ui/UiButton.vue'
 
 const route = useRoute()
-const router = useRouter()
 const nav = ref(null)
 const mobileTrigger = ref(null)
-const signingOut = ref(false)
+const { logout, signingOut } = useLogout()
 const {
   collapsed,
   mobileOpen,
@@ -55,18 +55,6 @@ function hideMobile(restoreFocus = false) {
   closeMobile()
   if (restoreFocus) {
     nextTick(() => mobileTrigger.value?.focus())
-  }
-}
-
-async function logout() {
-  if (signingOut.value) return
-  signingOut.value = true
-  try {
-    await sessionStore.logout()
-    closeMobile()
-    await router.replace('/login')
-  } finally {
-    signingOut.value = false
   }
 }
 
