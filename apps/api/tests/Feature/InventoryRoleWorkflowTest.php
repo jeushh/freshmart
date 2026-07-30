@@ -111,8 +111,6 @@ class InventoryRoleWorkflowTest extends TestCase
             'requested_quantity' => 25,
             'priority' => 'High',
             'reason' => 'Inventory staff identified replenishment demand.',
-            'status' => 'Approved',
-            'reviewed_by' => 'inventory',
         ])->assertCreated()
             ->assertJsonPath('requested_by', 'inventory')
             ->assertJsonPath('status', 'Pending Approval');
@@ -224,7 +222,7 @@ class InventoryRoleWorkflowTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_operations_manager_retains_approval_without_request_or_inventory_write_access(): void
+    public function test_inventory_staff_cannot_approve_or_inject_restock_status(): void
     {
         $product = DB::table('products')
             ->whereNotExists(fn ($query) => $query
@@ -234,18 +232,51 @@ class InventoryRoleWorkflowTest extends TestCase
             ->first();
         $inventory = User::where('username', 'inventory')->firstOrFail();
         $operations = User::where('username', 'operations')->firstOrFail();
-
         $this->actingAs($inventory);
-        $requestId = $this->postJson('/api/restock-requests', [
+
+        $created = $this->postJson('/api/restock-requests', [
             'product_id' => $product->id,
             'requested_quantity' => 12,
             'priority' => 'Normal',
-            'reason' => 'Approval boundary regression test.',
-        ])->assertCreated()->json('id');
+            'reason' => 'Restock approval authorization regression test.',
+            'status' => 'Approved',
+            'reviewed_by' => 'inventory',
+            'reviewed_at' => now()->format('Y-m-d H:i:s'),
+        ])->assertCreated()
+            ->assertJsonPath('status', 'Pending Approval')
+            ->assertJsonPath('requested_by', 'inventory')
+            ->assertJsonPath('reviewed_by', null)
+            ->assertJsonPath('reviewed_at', null);
+        $requestId = $created->json('id');
+
         $this->postJson("/api/restock-requests/{$requestId}/review", [
             'decision' => 'Approved',
         ])->assertForbidden();
+        $this->assertDatabaseHas('restock_requests', [
+            'id' => $requestId,
+            'status' => 'Pending Approval',
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+        ]);
 
+        $this->actingAs($operations);
+        $this->postJson("/api/restock-requests/{$requestId}/review", [
+            'decision' => 'Approved',
+            'notes' => 'Authorized Operations Manager approval.',
+        ])->assertOk()
+            ->assertJsonPath('status', 'Approved')
+            ->assertJsonPath('reviewed_by', 'operations');
+        $this->assertDatabaseHas('restock_requests', [
+            'id' => $requestId,
+            'status' => 'Approved',
+            'reviewed_by' => 'operations',
+        ]);
+    }
+
+    public function test_operations_manager_retains_approval_without_request_or_inventory_write_access(): void
+    {
+        $product = DB::table('products')->first();
+        $operations = User::where('username', 'operations')->firstOrFail();
         $this->actingAs($operations);
         $this->getJson('/api/restock-requests')->assertOk();
         $this->postJson('/api/restock-requests', [
@@ -254,11 +285,6 @@ class InventoryRoleWorkflowTest extends TestCase
             'priority' => 'Normal',
             'reason' => 'Operations must not originate restock requests.',
         ])->assertForbidden();
-        $this->postJson("/api/restock-requests/{$requestId}/review", [
-            'decision' => 'Approved',
-            'notes' => 'Managerial approval retained.',
-        ])->assertOk()
-            ->assertJsonPath('status', 'Approved');
         $this->postJson("/api/workspace/products/{$product->id}/adjust", [
             'quantity' => 1,
         ])->assertForbidden();
