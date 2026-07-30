@@ -111,6 +111,8 @@ class InventoryRoleWorkflowTest extends TestCase
             'requested_quantity' => 25,
             'priority' => 'High',
             'reason' => 'Inventory staff identified replenishment demand.',
+            'status' => 'Approved',
+            'reviewed_by' => 'inventory',
         ])->assertCreated()
             ->assertJsonPath('requested_by', 'inventory')
             ->assertJsonPath('status', 'Pending Approval');
@@ -164,6 +166,64 @@ class InventoryRoleWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_inventory_staff_cannot_approve_or_inject_purchase_order_status(): void
+    {
+        $inventory = User::where('username', 'inventory')->firstOrFail();
+        $operations = User::where('username', 'operations')->firstOrFail();
+        $product = DB::table('products')->whereNotNull('supplier_id')->first();
+        $payload = [
+            'supplier_id' => $product->supplier_id,
+            'approval_status' => 'Approved',
+            'status' => 'Fully Received',
+            'reviewed_by' => 'inventory',
+            'items' => [[
+                'product_id' => $product->id,
+                'quantity' => 2,
+                'unit_cost' => $product->cost_price,
+            ]],
+        ];
+        $this->actingAs($inventory);
+
+        $order = $this->postJson('/api/purchase-orders', $payload)
+            ->assertCreated()
+            ->assertJsonPath('order.approval_status', 'Draft')
+            ->assertJsonPath('order.status', 'Pending');
+        $purchaseOrderId = $order->json('order.id');
+        $updated = $this->putJson("/api/purchase-orders/{$purchaseOrderId}", $payload)
+            ->assertOk()
+            ->assertJsonPath('order.approval_status', 'Draft')
+            ->assertJsonPath('order.status', 'Pending');
+        $purchaseOrderItemId = $updated->json('items.0.id');
+        $this->postJson("/api/purchase-orders/{$purchaseOrderId}/receive", [
+            'items' => [[
+                'purchase_order_item_id' => $purchaseOrderItemId,
+                'delivered_quantity' => 2,
+            ]],
+        ])->assertStatus(409);
+        $this->postJson("/api/purchase-orders/{$purchaseOrderId}/submit", [])
+            ->assertOk()
+            ->assertJsonPath('order.approval_status', 'Submitted');
+        $this->postJson("/api/purchase-orders/{$purchaseOrderId}/review", [
+            'decision' => 'Approved',
+        ])->assertForbidden();
+        $this->assertDatabaseHas('purchase_orders', [
+            'id' => $purchaseOrderId,
+            'approval_status' => 'Submitted',
+            'status' => 'Pending',
+            'reviewed_by' => null,
+        ]);
+
+        $this->actingAs($operations);
+        $this->postJson("/api/purchase-orders/{$purchaseOrderId}/review", [
+            'decision' => 'Approved',
+        ])->assertOk();
+
+        $this->actingAs($inventory);
+        $this->postJson("/api/purchase-orders/{$purchaseOrderId}/cancel", [
+            'notes' => 'Inventory cannot cancel after approval.',
+        ])->assertForbidden();
+    }
+
     public function test_operations_manager_retains_approval_without_request_or_inventory_write_access(): void
     {
         $product = DB::table('products')
@@ -211,6 +271,24 @@ class InventoryRoleWorkflowTest extends TestCase
             ->get()
             ->map(fn ($product) => (array) $product)
             ->all();
+        DB::table('roles')->where('name', 'Cashier')->update([
+            'description' => 'Locally customized cashier.',
+            'permissions' => json_encode(
+                ['pos.access', 'system.audit.view'],
+                JSON_THROW_ON_ERROR,
+            ),
+        ]);
+        $customRoleId = DB::table('roles')->insertGetId([
+            'name' => 'Custom Inventory Observer',
+            'description' => 'Must survive built-in role restoration.',
+            'permissions' => json_encode(
+                ['reports.inventory.view'],
+                JSON_THROW_ON_ERROR,
+            ),
+            'landing_page' => 'dashboard',
+            'is_system' => 0,
+        ]);
+        $auditCount = DB::table('audit_logs')->count();
 
         app(RoleSeeder::class)->run();
 
@@ -220,6 +298,13 @@ class InventoryRoleWorkflowTest extends TestCase
             ->map(fn ($product) => (array) $product)
             ->all();
         $this->assertSame($productsBefore, $productsAfter);
+        $this->assertDatabaseHas('roles', [
+            'id' => $customRoleId,
+            'name' => 'Custom Inventory Observer',
+            'description' => 'Must survive built-in role restoration.',
+            'is_system' => 0,
+        ]);
+        $this->assertSame($auditCount, DB::table('audit_logs')->count());
         $this->assertSame(
             ['pos.access', 'pos.refund'],
             $this->permissionsFor('Cashier'),

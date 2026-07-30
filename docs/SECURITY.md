@@ -19,6 +19,17 @@ sales-reporting permission is explicitly granted. Inventory Staff create
 restock requests and perform inventory/procurement work; Operations Managers
 retain final restock and purchase-order approval.
 
+Refunds require `pos.refund`. The server loads the original sale and rejects a
+Cashier attempting to refund a sale recorded under another username.
+`sales.view` is the explicit organization-wide operational sales permission;
+only refund-capable users holding it may bypass the ownership check. The
+read-only `reports.sales.view` permission does not authorize refunds.
+
+Role changes made through the authenticated role API emit `role.created` or
+`role.updated` audit events, including old and new permissions. An explicit
+`db:seed` operation restores built-in role baselines and is an operator action,
+not an authenticated RBAC change; custom roles are left intact.
+
 ## API failures and privacy
 
 API errors use stable codes, safe messages, validation fields, and correlation
