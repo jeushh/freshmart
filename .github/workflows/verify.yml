@@ -30,8 +30,8 @@ jobs:
       CACHE_STORE: array
       SESSION_DRIVER: array
       QUEUE_CONNECTION: sync
-      FRESHMART_ADMIN_PASSWORD: ci-admin-password
-      FRESHMART_DEMO_PASSWORD: ci-demo-password
+      FRESHMART_ADMIN_PASSWORD: testing-admin-password
+      FRESHMART_DEMO_PASSWORD: testing-demo-password
       FRESHMART_SEED_DEMO: "true"
     steps:
       - uses: actions/checkout@v4

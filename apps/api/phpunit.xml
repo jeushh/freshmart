@@ -18,5 +18,6 @@
         <env name="FRESHMART_SEED_DEMO" value="true"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SANCTUM_STATEFUL_DOMAINS" value="127.0.0.1:5173,localhost:5173"/>
     </php>
 </phpunit>
