@@ -8,11 +8,11 @@ use `FRESHMART_DEMO_PASSWORD`; the administrator uses
 | Username | Password | Seeded role | Primary access |
 |---|---|---|---|
 | configured `FRESHMART_ADMIN_USERNAME` (`admin` locally) | `test123` | System Administrator | All modern modules and reports |
-| `cashier` | `test123` | Cashier | POS and sales report |
+| `cashier` | `test123` | Cashier | POS, permitted refunds, and own cashier dashboard sales |
 | `hr` | `test123` | HR Manager | Employees, attendance, HR, payroll reports |
 | `finance` | `test123` | Finance Manager | Finance and authorized finance/payroll/sales reports |
-| `operations` | `test123` | Operations Manager | Restock approval and procurement/inventory reports |
-| `inventory` | `test123` | Inventory Staff | Inventory, purchase orders, receiving, inventory/procurement reports |
+| `operations` | `test123` | Operations Manager | Final restock and purchase-order approval, plus procurement/inventory reports |
+| `inventory` | `test123` | Inventory Staff | Products, stock monitoring, restock requests, purchase orders, receiving, and inventory/procurement reports |
 | `employee` | `test123` | Employee | Linked self-service data only |
 
 This short password is intentionally limited to classroom demonstrations and

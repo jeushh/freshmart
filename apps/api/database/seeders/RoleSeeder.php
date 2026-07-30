@@ -52,15 +52,11 @@ class RoleSeeder extends Seeder
             ],
             [
                 'name' => 'Cashier',
-                'description' => 'Point-of-sale, refund, sales, and restock request access.',
+                'description' => 'Point-of-sale and permitted refund access.',
                 'landing_page' => 'pos',
                 'permissions' => [
                     'pos.access',
                     'pos.refund',
-                    'sales.view',
-                    'restock.request',
-                    'reports.sales.view',
-                    'reports.export',
                 ],
             ],
             [
@@ -119,7 +115,7 @@ class RoleSeeder extends Seeder
             ],
             [
                 'name' => 'Inventory Staff',
-                'description' => 'Product, inventory, and restock request access.',
+                'description' => 'Product, stock, restock, purchasing, receiving, and inventory reporting access.',
                 'landing_page' => 'inventory',
                 'permissions' => [
                     'inventory.manage',

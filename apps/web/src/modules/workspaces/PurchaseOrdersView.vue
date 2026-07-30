@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { api } from '../../api/http.js'
 import { sessionStore } from '../../stores/session.js'
 import PageHeader from '../../components/common/PageHeader.vue'
@@ -7,6 +8,8 @@ import WorkspaceTable from '../../components/common/WorkspaceTable.vue'
 import { formatMoney } from '../../utils/formatters.js'
 
 const orders = ref([])
+const route = useRoute()
+const receivingMode = computed(() => route.path === '/stock-receiving')
 const suppliers = ref([])
 const products = ref([])
 const restockRequests = ref([])
@@ -191,15 +194,27 @@ async function receiveStock() {
   }
 }
 
-onMounted(load)
+watch(receivingMode, isReceiving => {
+  filters.value.approval_status = isReceiving ? 'Approved' : ''
+  load()
+}, { immediate: true })
 </script>
 
 <template>
-  <PageHeader title="Purchase Orders" description="Create, approve, track, and receive supplier orders." />
+  <PageHeader
+    :title="receivingMode ? 'Stock Receiving' : 'Purchase Orders'"
+    :description="receivingMode
+      ? 'Receive accepted quantities from approved supplier purchase orders.'
+      : 'Create, approve, track, and receive supplier orders.'"
+  />
   <p v-if="error" class="form-error">{{ error }}</p>
   <p v-if="message" class="success-message">{{ message }}</p>
 
-  <form v-if="sessionStore.can('procurement.purchase_orders.manage')" class="management-form" @submit.prevent="save">
+  <form
+    v-if="!receivingMode && sessionStore.can('procurement.purchase_orders.manage')"
+    class="management-form"
+    @submit.prevent="save"
+  >
     <div class="form-grid">
       <label>
         Supplier

@@ -6,9 +6,12 @@ defineEmits(['close'])
 const items = [
   ['Dashboard','/',''], ['Point of Sale','/pos','pos.access'], ['Employees','/employees','hr.employees.view'],
   ['Attendance','/attendance','hr.attendance.view'], ['HR Requests','/hr-requests','hr.requests.view'],
-  ['Payroll','/payroll','payroll.manage'], ['Inventory','/inventory','inventory.manage|restock.approve'],
+  ['Payroll','/payroll','payroll.manage'], ['Products & Stock','/inventory','inventory.manage|restock.approve'],
+  ['Low Stock','/inventory/low-stock','inventory.manage'],
+  ['Inventory Movements','/inventory/movements','inventory.manage'],
   ['Restock Requests','/restock-requests','restock.request|restock.approve'],
   ['Purchase Orders','/purchase-orders','procurement.purchase_orders.view'],
+  ['Stock Receiving','/stock-receiving','procurement.stock.receive'],
   ['Reports','/reports','reports.sales.view|reports.inventory.view|reports.procurement.view|reports.hr.view|reports.payroll.view|reports.finance.view'],
   ['Finance','/finance','finance.requests.view|finance.manage'], ['Self-Service','/self-service','employee.self'],
   ['Administration','/admin','system.users.manage|system.audit.view'],

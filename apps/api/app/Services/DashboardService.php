@@ -19,6 +19,10 @@ class DashboardService
         $now = CarbonImmutable::now($settings['timezone']);
         $today = $now->startOfDay();
         $month = $now->startOfMonth();
+        $canViewOrganizationSales = $user->hasAnyPermission(
+            'sales.view',
+            'reports.sales.view',
+        );
         $payload = [
             'generated_at' => $now->toIso8601String(),
             'timezone' => $settings['timezone'],
@@ -49,13 +53,11 @@ class DashboardService
             $payload['sections']['system_health'] = $this->systemHealth();
         }
 
-        if ($user->hasAnyPermission('pos.access', 'reports.sales.view')) {
+        if ($user->hasAnyPermission('pos.access', 'sales.view', 'reports.sales.view')) {
             $sales = $this->salesSummary(
                 $today->format('Y-m-d H:i:s'),
                 $now->format('Y-m-d H:i:s'),
-                $user->hasAnyPermission('reports.sales.view')
-                    ? null
-                    : $user->username,
+                $canViewOrganizationSales ? null : $user->username,
             );
             $payload['metrics'] = array_merge($payload['metrics'], [
                 $this->metric('today_sales', "Today's sales", $sales['total'], 'money'),
@@ -72,7 +74,7 @@ class DashboardService
                     DB::raw('MAX(cashier_username) as cashier_username'),
                 )
                 ->when(
-                    ! $user->hasAnyPermission('reports.sales.view'),
+                    ! $canViewOrganizationSales,
                     fn ($query) => $query->where('cashier_username', $user->username),
                 )
                 ->groupBy('order_id')
@@ -80,7 +82,7 @@ class DashboardService
                 ->limit(8)
                 ->get();
             $payload['charts']['sales_last_7_days'] = $this->salesChart($now, $user);
-            if ($user->hasAnyPermission('reports.sales.view')) {
+            if ($canViewOrganizationSales) {
                 $monthSales = $this->salesSummary(
                     $month->format('Y-m-d H:i:s'),
                     $now->format('Y-m-d H:i:s'),
@@ -95,12 +97,16 @@ class DashboardService
             }
         }
         if ($user->hasAnyPermission('pos.refund')) {
+            $refunds = DB::table('refunds')
+                ->where('created_at', '>=', $month->format('Y-m-d H:i:s'))
+                ->when(
+                    ! $canViewOrganizationSales,
+                    fn ($query) => $query->where('processed_by', $user->username),
+                );
             $payload['metrics'][] = $this->metric(
                 'month_refunds',
                 'Month refunds',
-                round((float) DB::table('refunds')
-                    ->where('created_at', '>=', $month->format('Y-m-d H:i:s'))
-                    ->sum('refund_amount'), 2),
+                round((float) $refunds->sum('refund_amount'), 2),
                 'money',
             );
         }
@@ -397,10 +403,14 @@ class DashboardService
     private function salesChart(CarbonImmutable $now, User $user): array
     {
         $from = $now->subDays(6)->startOfDay();
+        $canViewOrganizationSales = $user->hasAnyPermission(
+            'sales.view',
+            'reports.sales.view',
+        );
         $rows = DB::table('sales_ledger')
             ->where('timestamp', '>=', $from->format('Y-m-d H:i:s'))
             ->when(
-                ! $user->hasAnyPermission('reports.sales.view'),
+                ! $canViewOrganizationSales,
                 fn ($query) => $query->where('cashier_username', $user->username),
             )
             ->selectRaw('date(timestamp) as day, ROUND(SUM(total_price), 2) as total')

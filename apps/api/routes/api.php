@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\HrRequestController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\PurchaseOrderController;
+use App\Http\Controllers\Api\RefundController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RestockRequestController;
 use App\Http\Controllers\Api\RoleController;
@@ -64,6 +65,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/workspace/pos', [BusinessController::class, 'pos'])->middleware('permission:pos.access');
     Route::post('/workspace/pos/checkout', [BusinessController::class, 'checkout'])->middleware('permission:pos.access');
+    Route::post('/workspace/pos/refunds', [RefundController::class, 'store'])
+        ->middleware('permission:pos.refund');
 
     Route::get('/workspace/admin', [BusinessController::class, 'admin'])
         ->middleware('permission:system.users.manage|system.roles.manage|system.audit.view|system.settings.manage');

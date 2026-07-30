@@ -104,6 +104,12 @@ cd apps/api
 php artisan db:seed
 ```
 
+`RoleSeeder` is the canonical baseline for the seven built-in roles. Every
+explicit `db:seed` run restores those roles' descriptions, landing pages, and
+permissions. Custom roles are preserved. Role changes made through the
+application remain in effect until an operator deliberately runs the seeder;
+normal production releases must not run `db:seed`.
+
 ## Resetting a disposable local database
 
 First confirm `DB_DATABASE=database/database.sqlite` in `apps/api/.env`, then:
@@ -122,6 +128,14 @@ inventory, procurement, HR, payroll, and finance reports. Reports support
 validated date filters, pagination, spreadsheet-safe CSV export, and
 print-ready output. Currency, timezone, and tax behavior come from allowlisted
 system settings; finalized sales retain their own tax snapshots.
+
+Cashier accounts are limited to POS, permitted refunds, and their own cashier
+sales context. Inventory Staff own product, stock-monitoring, restock,
+purchase-order, receiving, and inventory/procurement reporting work.
+Operations Managers retain final restock and purchase-order approval.
+Cashiers may refund only their own sales. A user must hold `pos.refund` to
+perform any refund; a refund-capable user with `sales.view` may refund sales
+from any cashier.
 
 Create a consistent online SQLite backup with a checksum manifest:
 

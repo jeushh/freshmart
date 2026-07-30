@@ -28,6 +28,40 @@ self-service, dashboards, and reports. The `legacy/` tree and
 `database/freshmart.sqlite` remain reference-only and are not application
 runtime dependencies.
 
+## Inventory and restock responsibility
+
+- Cashiers use POS and see only their own cashier sales context. They do not
+  receive inventory, restock, procurement, or inventory-report permissions.
+- Inventory Staff manage products and audited stock adjustments, monitor low
+  stock and inventory movements, create restock requests, manage purchase
+  orders, receive approved deliveries, and use inventory/procurement reports.
+- Operations Managers retain final restock and purchase-order approval.
+  Inventory Staff cannot approve their own restock requests or purchase orders.
+- Laravel route middleware enforces each boundary. Vue navigation mirrors the
+  granted permissions but is not the security boundary.
+
+## Sales and refund responsibility
+
+- `pos.access` authorizes checkout. Cashiers see only their own recent sales.
+- `pos.refund` authorizes the refund mutation but does not bypass sale
+  ownership. Cashiers can refund only sales recorded under their username.
+- `sales.view` grants organization-wide operational sales context. When it is
+  combined with `pos.refund`, the user may refund another cashier's sale.
+- `reports.sales.view` independently grants the full sales report and does not
+  authorize refund mutations.
+- Refunds run transactionally and restore stock, record an inventory movement
+  and outbound financial transaction, and emit a `refund.completed` audit
+  event.
+
+## Built-in role baseline
+
+`RoleSeeder` intentionally restores the canonical definitions of the seven
+built-in roles whenever an operator explicitly runs `db:seed`. It does not
+replace custom roles or business records. Interactive role creation and
+updates are audited with their permission changes; seeding runs outside an
+authenticated request and is recorded in deployment/operator logs rather than
+the application audit table.
+
 ## Reporting flow
 
 Report routes have a literal report type and a dedicated view permission.

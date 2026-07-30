@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { api } from '../../api/http.js'
 import PageHeader from '../../components/common/PageHeader.vue'
 import WorkspaceTable from '../../components/common/WorkspaceTable.vue'
@@ -7,8 +8,30 @@ import { sessionStore } from '../../stores/session.js'
 import { formatMoney } from '../../utils/formatters.js'
 
 const rows = ref([])
+const lowStockRows = ref([])
+const movements = ref([])
 const error = ref('')
 const search = ref('')
+const route = useRoute()
+const section = computed(() => {
+  if (route.path.endsWith('/low-stock')) return 'low-stock'
+  if (route.path.endsWith('/movements')) return 'movements'
+  return 'products'
+})
+const page = computed(() => ({
+  products: {
+    title: 'Products & Stock',
+    description: 'Manage product information and make audited stock adjustments.'
+  },
+  'low-stock': {
+    title: 'Low Stock',
+    description: 'Monitor active products at or below their reorder levels.'
+  },
+  movements: {
+    title: 'Inventory Movements',
+    description: 'Review the latest audited changes to product stock.'
+  }
+})[section.value])
 const blankForm = () => ({
   sku: '',
   name: '',
@@ -29,6 +52,8 @@ async function load() {
     await sessionStore.refreshSettings()
     const data = await api.get('/workspace/inventory', { search: search.value, per_page: 100 })
     rows.value = data.products.data
+    lowStockRows.value = data.low_stock_products
+    movements.value = data.inventory_movements
   } catch (requestError) {
     error.value = requestError.message
   }
@@ -61,9 +86,9 @@ onMounted(load)
 </script>
 
 <template>
-  <PageHeader title="Inventory" description="Manage products and make audited stock adjustments." />
+  <PageHeader :title="page.title" :description="page.description" />
   <p v-if="error" class="form-error">{{ error }}</p>
-  <form v-if="sessionStore.can('inventory.manage')" class="inline-form" @submit.prevent="save">
+  <form v-if="section === 'products' && sessionStore.can('inventory.manage')" class="inline-form" @submit.prevent="save">
     <input v-model="form.sku" placeholder="SKU" required>
     <input v-model="form.name" placeholder="Product name" required>
     <input v-model.number="form.price" type="number" min="0" step=".01" placeholder="Price">
@@ -71,11 +96,12 @@ onMounted(load)
     <label class="compact-label">Initial stock<input v-model.number="form.stock_quantity" type="number" min="0"></label>
     <button class="primary-button">Add product</button>
   </form>
-  <div class="table-toolbar">
+  <div v-if="section === 'products'" class="table-toolbar">
     <input v-model="search" placeholder="Search products">
     <button @click="load">Search</button>
   </div>
   <WorkspaceTable
+    v-if="section === 'products'"
     :columns="[
       { key: 'sku', label: 'SKU' },
       { key: 'name', label: 'Product' },
@@ -94,4 +120,35 @@ onMounted(load)
       <button @click="adjust(row)">Adjust stock</button>
     </template>
   </WorkspaceTable>
+  <WorkspaceTable
+    v-else-if="section === 'low-stock'"
+    :columns="[
+      { key: 'sku', label: 'SKU' },
+      { key: 'name', label: 'Product' },
+      { key: 'stock_quantity', label: 'Current stock' },
+      { key: 'reorder_level', label: 'Reorder level' },
+      { key: 'max_stock', label: 'Maximum stock' },
+      { key: 'unit', label: 'Unit' },
+      { key: 'supplier_name', label: 'Supplier' }
+    ]"
+    :rows="lowStockRows"
+  >
+    <template #cell-stock_quantity="{ row }">
+      <span class="danger-text">{{ row.stock_quantity }}</span>
+    </template>
+  </WorkspaceTable>
+  <WorkspaceTable
+    v-else
+    :columns="[
+      { key: 'created_at', label: 'Date' },
+      { key: 'sku', label: 'SKU' },
+      { key: 'product_name', label: 'Product' },
+      { key: 'movement_type', label: 'Movement' },
+      { key: 'quantity', label: 'Quantity' },
+      { key: 'previous_stock', label: 'Previous' },
+      { key: 'new_stock', label: 'New stock' },
+      { key: 'performed_by', label: 'Performed by' }
+    ]"
+    :rows="movements"
+  />
 </template>

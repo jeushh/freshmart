@@ -15,7 +15,7 @@ final class PermissionCatalog
         'Point of sale and sales' => [
             'pos.access' => 'Use point of sale',
             'pos.refund' => 'Process refunds',
-            'sales.view' => 'View sales reporting',
+            'sales.view' => 'View organization-wide sales context',
         ],
         'Inventory and procurement' => [
             'inventory.manage' => 'Manage products and inventory',
