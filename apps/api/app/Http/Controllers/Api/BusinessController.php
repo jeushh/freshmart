@@ -40,6 +40,39 @@ class BusinessController extends Controller
                 ->where('status', 'Active')
                 ->whereColumn('stock_quantity', '<=', 'reorder_level')
                 ->count(),
+            'low_stock_products' => DB::table('products')
+                ->leftJoin('suppliers', 'products.supplier_id', '=', 'suppliers.id')
+                ->where('products.status', 'Active')
+                ->whereColumn('products.stock_quantity', '<=', 'products.reorder_level')
+                ->orderBy('products.stock_quantity')
+                ->orderBy('products.name')
+                ->get([
+                    'products.id',
+                    'products.sku',
+                    'products.name',
+                    'products.stock_quantity',
+                    'products.reorder_level',
+                    'products.max_stock',
+                    'products.unit',
+                    'suppliers.name as supplier_name',
+                ]),
+            'inventory_movements' => DB::table('inventory_movements')
+                ->leftJoin('products', 'inventory_movements.product_id', '=', 'products.id')
+                ->orderByDesc('inventory_movements.id')
+                ->limit(100)
+                ->get([
+                    'inventory_movements.id',
+                    'inventory_movements.created_at',
+                    'inventory_movements.sku',
+                    'products.name as product_name',
+                    'inventory_movements.movement_type',
+                    'inventory_movements.quantity',
+                    'inventory_movements.previous_stock',
+                    'inventory_movements.new_stock',
+                    'inventory_movements.reference_id',
+                    'inventory_movements.performed_by',
+                    'inventory_movements.notes',
+                ]),
         ]);
     }
 
@@ -182,15 +215,33 @@ class BusinessController extends Controller
         });
     }
 
-    public function pos(SystemSettingsService $settings)
+    public function pos(Request $request, SystemSettingsService $settings)
     {
+        $user = $request->user();
+
         return [
             'products' => DB::table('products')
                 ->where('status', 'Active')
                 ->where('stock_quantity', '>', 0)
                 ->orderBy('name')
+                ->get([
+                    'id',
+                    'sku',
+                    'name',
+                    'category',
+                    'price',
+                    'stock_quantity',
+                    'unit',
+                    'emoji',
+                ]),
+            'sales' => DB::table('sales_ledger')
+                ->when(
+                    ! $user->hasAnyPermission('sales.view'),
+                    fn ($query) => $query->where('cashier_username', $user->username),
+                )
+                ->orderByDesc('id')
+                ->limit(30)
                 ->get(),
-            'sales' => DB::table('sales_ledger')->orderByDesc('id')->limit(30)->get(),
             'settings' => $settings->public(),
         ];
     }

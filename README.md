@@ -123,6 +123,11 @@ validated date filters, pagination, spreadsheet-safe CSV export, and
 print-ready output. Currency, timezone, and tax behavior come from allowlisted
 system settings; finalized sales retain their own tax snapshots.
 
+Cashier accounts are limited to POS, permitted refunds, and their own cashier
+sales context. Inventory Staff own product, stock-monitoring, restock,
+purchase-order, receiving, and inventory/procurement reporting work.
+Operations Managers retain final restock and purchase-order approval.
+
 Create a consistent online SQLite backup with a checksum manifest:
 
 ```bash

@@ -32,11 +32,18 @@ const routes = [
       { path: 'hr-requests', component: HrRequestsView, meta: { permission: 'hr.requests.view' } },
       { path: 'payroll', component: PayrollView, meta: { permission: 'payroll.manage' } },
       { path: 'inventory', component: InventoryView, meta: { permission: 'inventory.manage|restock.approve' } },
+      { path: 'inventory/low-stock', component: InventoryView, meta: { permission: 'inventory.manage' } },
+      { path: 'inventory/movements', component: InventoryView, meta: { permission: 'inventory.manage' } },
       { path: 'restock-requests', component: RestockRequestsView, meta: { permission: 'restock.request|restock.approve' } },
       {
         path: 'purchase-orders',
         component: PurchaseOrdersView,
         meta: { permission: 'procurement.purchase_orders.view' }
+      },
+      {
+        path: 'stock-receiving',
+        component: PurchaseOrdersView,
+        meta: { permission: 'procurement.stock.receive' }
       },
       { path: 'finance', component: FinanceView, meta: { permission: 'finance.requests.view|finance.manage' } },
       { path: 'pos', component: PosView, meta: { permission: 'pos.access' } },

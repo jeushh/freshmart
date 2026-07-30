@@ -13,6 +13,12 @@ permission, and export requires both that view permission and
 operators; the backup permission is reserved for trusted system
 administration visibility.
 
+Cashier access is limited to POS and permitted refund behavior. POS sales and
+dashboard refund data are scoped to the authenticated cashier unless a broader
+sales-reporting permission is explicitly granted. Inventory Staff create
+restock requests and perform inventory/procurement work; Operations Managers
+retain final restock and purchase-order approval.
+
 ## API failures and privacy
 
 API errors use stable codes, safe messages, validation fields, and correlation

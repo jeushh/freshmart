@@ -28,6 +28,18 @@ self-service, dashboards, and reports. The `legacy/` tree and
 `database/freshmart.sqlite` remain reference-only and are not application
 runtime dependencies.
 
+## Inventory and restock responsibility
+
+- Cashiers use POS and see only their own cashier sales context. They do not
+  receive inventory, restock, procurement, or inventory-report permissions.
+- Inventory Staff manage products and audited stock adjustments, monitor low
+  stock and inventory movements, create restock requests, manage purchase
+  orders, receive approved deliveries, and use inventory/procurement reports.
+- Operations Managers retain final restock and purchase-order approval.
+  Inventory Staff cannot approve their own restock requests or purchase orders.
+- Laravel route middleware enforces each boundary. Vue navigation mirrors the
+  granted permissions but is not the security boundary.
+
 ## Reporting flow
 
 Report routes have a literal report type and a dedicated view permission.

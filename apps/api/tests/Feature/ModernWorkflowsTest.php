@@ -180,7 +180,7 @@ class ModernWorkflowsTest extends TestCase
     public function test_restock_request_creation_approval_and_duplicate_guards(): void
     {
         $product = DB::table('products')->where('sku', 'FRU-001')->first();
-        $this->actingAs(User::where('username', 'cashier')->firstOrFail());
+        $this->actingAs(User::where('username', 'inventory')->firstOrFail());
         $response = $this->postJson('/api/restock-requests', [
             'product_id' => $product->id,
             'requested_quantity' => 25,
