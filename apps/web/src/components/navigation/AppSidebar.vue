@@ -5,9 +5,13 @@ defineProps({ open: Boolean })
 defineEmits(['close'])
 const items = [
   ['Dashboard','/',''], ['Point of Sale','/pos','pos.access'], ['Employees','/employees','hr.employees.view'],
-  ['Attendance','/attendance','hr.attendance.view'], ['Payroll','/payroll','payroll.manage'],
-  ['Inventory','/inventory','inventory.manage|restock.approve'], ['Finance','/finance','finance.requests.view|finance.manage'],
-  ['Self-Service','/self-service','employee.self'], ['Administration','/admin','system.users.manage|system.roles.manage|system.audit.view|system.settings.manage']
+  ['Attendance','/attendance','hr.attendance.view'], ['HR Requests','/hr-requests','hr.requests.view'],
+  ['Payroll','/payroll','payroll.manage'], ['Inventory','/inventory','inventory.manage|restock.approve'],
+  ['Restock Requests','/restock-requests','restock.request|restock.approve'],
+  ['Purchase Orders','/purchase-orders','procurement.purchase_orders.view'],
+  ['Finance','/finance','finance.requests.view|finance.manage'], ['Self-Service','/self-service','employee.self'],
+  ['Administration','/admin','system.users.manage|system.audit.view'],
+  ['Roles & Permissions','/roles','system.roles.manage'], ['System Settings','/settings','system.settings.manage']
 ]
 const visible = computed(() => items.filter(([, , p]) => !p || sessionStore.can(p)))
 </script>

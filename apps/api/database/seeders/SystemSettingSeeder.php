@@ -15,6 +15,9 @@ class SystemSettingSeeder extends Seeder
             'business_phone' => '',
             'business_email' => '',
             'system_name' => 'FreshMart System Administration Console',
+            'currency' => 'PHP',
+            'default_tax_rate' => '0',
+            'low_stock_alert_enabled' => '1',
         ];
 
         foreach ($settings as $key => $value) {

@@ -54,7 +54,11 @@ class DatabaseBootstrapTest extends TestCase
         $this->assertDatabaseHas('roles', [
             'name' => 'System Administrator',
             'landing_page' => 'admin',
+            'is_system' => 1,
         ]);
+        $this->assertTrue(Schema::hasColumn('roles', 'is_system'));
+        $this->assertTrue(Schema::hasColumn('purchase_orders', 'approval_status'));
+        $this->assertTrue(Schema::hasColumn('purchase_orders', 'reviewed_by'));
         $this->assertDatabaseHas('admin_users', [
             'username' => 'admin',
             'status' => 'Active',
@@ -66,6 +70,13 @@ class DatabaseBootstrapTest extends TestCase
         $this->assertSame(3, DB::table('employees')->count());
         $this->assertSame(3, DB::table('suppliers')->count());
         $this->assertSame(8, DB::table('products')->count());
+        $inventoryPermissions = json_decode(
+            DB::table('roles')->where('name', 'Inventory Staff')->value('permissions'),
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        );
+        $this->assertContains('procurement.purchase_orders.manage', $inventoryPermissions);
+        $this->assertContains('procurement.stock.receive', $inventoryPermissions);
     }
 
     public function test_seeders_are_repeatable_without_creating_duplicates(): void
