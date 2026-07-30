@@ -405,6 +405,6 @@ class DemoDataSeeder extends Seeder
             );
         }
 
-        return 'FreshMart-Local-Only-2026!';
+        return 'test123';
     }
 }

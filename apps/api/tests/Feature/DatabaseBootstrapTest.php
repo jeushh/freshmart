@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class DatabaseBootstrapTest extends TestCase
@@ -67,7 +68,7 @@ class DatabaseBootstrapTest extends TestCase
             'status' => 'Active',
         ]);
         $this->assertTrue(Hash::check(
-            'testing-admin-password',
+            'test123',
             DB::table('admin_users')->where('username', 'admin')->value('password_hash'),
         ));
         $this->assertSame(3, DB::table('employees')->count());
@@ -86,6 +87,38 @@ class DatabaseBootstrapTest extends TestCase
             'setting_key' => 'currency_code',
             'setting_value' => 'PHP',
         ]);
+    }
+
+    #[DataProvider('demoAccountUsernames')]
+    public function test_every_local_demo_account_authenticates_with_classroom_password(
+        string $username,
+    ): void {
+        $this->withHeaders([
+            'Origin' => 'http://127.0.0.1:5173',
+            'Referer' => 'http://127.0.0.1:5173/',
+        ]);
+
+        $this->postJson('/api/login', [
+            'username' => $username,
+            'password' => 'test123',
+        ])->assertOk()
+            ->assertJsonPath('user.username', $username);
+
+        $this->postJson('/api/logout')->assertNoContent();
+        $this->assertGuest('web');
+    }
+
+    public static function demoAccountUsernames(): array
+    {
+        return [
+            'administrator' => ['admin'],
+            'cashier' => ['cashier'],
+            'hr manager' => ['hr'],
+            'finance manager' => ['finance'],
+            'operations manager' => ['operations'],
+            'inventory staff' => ['inventory'],
+            'employee' => ['employee'],
+        ];
     }
 
     public function test_seeders_are_repeatable_without_creating_duplicates(): void

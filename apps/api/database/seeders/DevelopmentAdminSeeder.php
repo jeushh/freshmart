@@ -25,7 +25,7 @@ class DevelopmentAdminSeeder extends Seeder
         );
         $password = $this->credential(
             'FRESHMART_ADMIN_PASSWORD',
-            'FreshMart-Local-Only-2026!',
+            'test123',
         );
 
         DB::table('admin_users')->updateOrInsert(

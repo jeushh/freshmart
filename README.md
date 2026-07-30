@@ -93,6 +93,9 @@ The checked-in `.env.example` values are local-only defaults. Set
 deployment-specific secrets before intentionally seeding outside local
 development. Passwords are stored only as Laravel password hashes in SQLite.
 Seeders reject missing credential values outside local/testing environments.
+For classroom demonstrations, all seven local accounts use `test123`; see
+[the test-account table](docs/TEST_ACCOUNTS.md). Never use this password in a
+shared or production deployment.
 
 Run repeatable seeders explicitly:
 
