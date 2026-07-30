@@ -6,17 +6,17 @@ in `FRESHMART_DEMO_PASSWORD`. The System Administrator uses
 
 The `.env.example` local-only default for both is:
 
-`FreshMart-Local-Only-2026!`
+`test123`
 
-| Username | Role |
-|---|---|
-| admin | System Administrator |
-| cashier | Cashier |
-| hr | HR Manager |
-| finance | Finance Manager |
-| operations | Operations Manager |
-| inventory | Inventory Staff |
-| employee | Employee |
+| Username | Password | Role |
+|---|---|---|
+| admin | `test123` | System Administrator |
+| cashier | `test123` | Cashier |
+| hr | `test123` | HR Manager |
+| finance | `test123` | Finance Manager |
+| operations | `test123` | Operations Manager |
+| inventory | `test123` | Inventory Staff |
+| employee | `test123` | Employee |
 
 These accounts are created only by the repeatable seeders and are for local
 testing and demonstrations. Set deployment-specific credentials and disable
