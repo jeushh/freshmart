@@ -82,10 +82,13 @@
   --fm-control-height-lg: 2.75rem;
   --fm-content-width: 94rem;
   --fm-shell-sidebar-width: 16rem;
+  --fm-shell-sidebar-collapsed-width: 4.75rem;
   --fm-shell-header-height: 4rem;
   --fm-shell-content-gutter: clamp(var(--fm-space-4), 2.5vw, var(--fm-space-8));
   --fm-shell-z-header: 30;
   --fm-shell-z-sidebar: 40;
+  --fm-size-icon: 1.25rem;
+  --fm-size-avatar: 2.25rem;
   --fm-transition-fast: 120ms ease;
   --fm-transition-base: 180ms ease;
   --fm-z-dropdown: 50;

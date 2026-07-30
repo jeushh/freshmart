@@ -1,8 +1,18 @@
+<script setup>
+import AppSidebar from '../components/navigation/AppSidebar.vue'
+import { useSidebarState } from '../composables/useSidebarState.js'
+
+const { collapsed, mobileOpen } = useSidebarState()
+</script>
+
 <template>
-  <div class="fm-shell">
-    <aside class="fm-shell__sidebar" aria-label="Application sidebar">
-      <!-- Step 6 owns all sidebar navigation content. -->
-      <slot name="sidebar"></slot>
+  <div class="fm-shell" :class="{ 'fm-shell--sidebar-collapsed': collapsed }">
+    <aside
+      class="fm-shell__sidebar"
+      :class="{ 'fm-shell__sidebar--open': mobileOpen }"
+      aria-label="Application sidebar"
+    >
+      <AppSidebar />
     </aside>
 
     <div class="fm-shell__body">
