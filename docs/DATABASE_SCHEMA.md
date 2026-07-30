@@ -60,6 +60,10 @@ these deliberate integrity improvements:
   where the old schema did not record those facts.
 - Reporting indexes cover sales dates/cashiers, refunds, purchase orders,
   receiving dates, payroll, HR requests, finance transactions, and payables.
+- The reporting migration inserts only missing safe localization, tax,
+  reporting-range, and backup-retention defaults so existing installations can
+  migrate without running development seeders; existing setting values are
+  never overwritten.
 - Laravel support tables are new; they were not part of the legacy database.
 
 No application table or column from the committed reference schema was

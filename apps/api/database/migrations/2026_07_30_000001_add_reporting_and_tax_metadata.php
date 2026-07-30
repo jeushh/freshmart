@@ -66,6 +66,34 @@ return new class extends Migration
             'CREATE INDEX idx_payables_reporting '
             .'ON accounts_payable(status, due_date, supplier_id)',
         );
+
+        $legacyCurrency = DB::table('system_settings')
+            ->where('setting_key', 'currency')
+            ->value('setting_value') ?: 'PHP';
+        $legacyTaxRate = DB::table('system_settings')
+            ->where('setting_key', 'default_tax_rate')
+            ->value('setting_value') ?: '0';
+        $defaults = [
+            'business_name' => 'FreshMart',
+            'business_address' => '',
+            'business_contact' => '',
+            'receipt_footer' => 'Thank you for shopping at FreshMart.',
+            'currency_code' => $legacyCurrency,
+            'currency_symbol' => $legacyCurrency === 'USD' ? '$' : '₱',
+            'currency_locale' => $legacyCurrency === 'USD' ? 'en-US' : 'en-PH',
+            'timezone' => 'Asia/Manila',
+            'tax_rate' => $legacyTaxRate,
+            'tax_inclusive' => '1',
+            'report_max_date_range_days' => '366',
+            'backup_retention_count' => '10',
+        ];
+        foreach ($defaults as $key => $value) {
+            DB::table('system_settings')->insertOrIgnore([
+                'setting_key' => $key,
+                'setting_value' => $value,
+                'updated_at' => now()->format('Y-m-d H:i:s'),
+            ]);
+        }
     }
 
     public function down(): void
