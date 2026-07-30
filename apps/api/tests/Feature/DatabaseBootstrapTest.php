@@ -59,6 +59,9 @@ class DatabaseBootstrapTest extends TestCase
         $this->assertTrue(Schema::hasColumn('roles', 'is_system'));
         $this->assertTrue(Schema::hasColumn('purchase_orders', 'approval_status'));
         $this->assertTrue(Schema::hasColumn('purchase_orders', 'reviewed_by'));
+        $this->assertTrue(Schema::hasColumn('sales_ledger', 'tax_rate'));
+        $this->assertTrue(Schema::hasColumn('sales_ledger', 'tax_amount'));
+        $this->assertTrue(Schema::hasColumn('sales_ledger', 'discount_amount'));
         $this->assertDatabaseHas('admin_users', [
             'username' => 'admin',
             'status' => 'Active',
@@ -77,6 +80,12 @@ class DatabaseBootstrapTest extends TestCase
         );
         $this->assertContains('procurement.purchase_orders.manage', $inventoryPermissions);
         $this->assertContains('procurement.stock.receive', $inventoryPermissions);
+        $this->assertContains('reports.inventory.view', $inventoryPermissions);
+        $this->assertContains('reports.procurement.view', $inventoryPermissions);
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => 'currency_code',
+            'setting_value' => 'PHP',
+        ]);
     }
 
     public function test_seeders_are_repeatable_without_creating_duplicates(): void
@@ -102,6 +111,49 @@ class DatabaseBootstrapTest extends TestCase
         $this->assertFalse(Schema::hasTable('roles'));
         $this->assertFalse(Schema::hasTable('products'));
         $this->assertFalse(Schema::hasTable('financial_transactions'));
+    }
+
+    public function test_reporting_migration_preserves_existing_settings_and_fills_missing_defaults(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_07_30_000001_add_reporting_and_tax_metadata.php',
+        );
+        $migration->down();
+        DB::table('system_settings')->whereIn('setting_key', [
+            'currency_code',
+            'currency_symbol',
+            'currency_locale',
+            'tax_rate',
+            'business_contact',
+        ])->delete();
+        DB::table('system_settings')->where('setting_key', 'currency')
+            ->update(['setting_value' => 'USD']);
+        DB::table('system_settings')->where('setting_key', 'default_tax_rate')
+            ->update(['setting_value' => '7.5']);
+        DB::table('system_settings')->insert([
+            'setting_key' => 'business_contact',
+            'setting_value' => 'Keep this value',
+        ]);
+
+        $migration->up();
+
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => 'currency_code',
+            'setting_value' => 'USD',
+        ]);
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => 'currency_symbol',
+            'setting_value' => '$',
+        ]);
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => 'tax_rate',
+            'setting_value' => '7.5',
+        ]);
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => 'business_contact',
+            'setting_value' => 'Keep this value',
+        ]);
+        $this->assertTrue(Schema::hasColumn('sales_ledger', 'tax_amount'));
     }
 
     private function seededCounts(): array

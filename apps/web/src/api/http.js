@@ -15,12 +15,27 @@ async function request(config) {
   try {
     return (await http(config)).data
   } catch (error) {
-    const message = error.response?.data?.message
-      || Object.values(error.response?.data?.errors || {}).flat()[0]
+    const status = error.response?.status
+    const method = String(config.method || 'get').toLowerCase()
+    const retryable = method === 'get'
+      && !config.__retried
+      && (!error.response || [502, 503, 504].includes(status))
+    if (retryable) {
+      return request({ ...config, __retried: true })
+    }
+    const payload = error.response?.data || {}
+    const message = Object.values(payload.errors || {}).flat()[0]
+      || payload.message
       || error.message
       || 'Request failed.'
     const requestError = new Error(message)
-    requestError.status = error.response?.status
+    requestError.status = status
+    requestError.code = payload.code || 'REQUEST_FAILED'
+    requestError.errors = payload.errors || {}
+    requestError.requestId = payload.request_id || error.response?.headers?.['x-request-id'] || ''
+    if ([401, 419].includes(status) && config.url !== '/me') {
+      window.dispatchEvent(new CustomEvent('freshmart:session-expired'))
+    }
     throw requestError
   }
 }
@@ -40,7 +55,8 @@ export const api = {
         full_name: user.full_name,
         employee_id: user.employee_id,
         permissions: data.permissions || [],
-        landing_page: data.landing_page || 'dashboard'
+        landing_page: data.landing_page || 'dashboard',
+        settings: data.settings || {}
       }
     } catch (error) {
       if ([401, 419].includes(error.status)) {
@@ -57,6 +73,7 @@ export const api = {
   get: (url, params = {}) => request({ url, params }),
   post: (url, data = {}) => request({ method: 'post', url, data }),
   put: (url, data = {}) => request({ method: 'put', url, data }),
+  download: (url, params = {}) => request({ url, params, responseType: 'blob' }),
   employees: (params = {}) => request({ url: '/employees', params }),
   attendance: (params = {}) => request({ url: '/attendance', params }),
   payroll: (params = {}) => request({ url: '/payroll', params })

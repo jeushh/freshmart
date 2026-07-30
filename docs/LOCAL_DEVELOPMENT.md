@@ -16,3 +16,30 @@ The setup scripts refuse to run Laravel migrations against it.
 To prepare dependencies and migrations without demo data, omit `--seed`.
 To reset a disposable local database later, first confirm the database path,
 then run `php artisan migrate:fresh --seed` from `apps/api`.
+
+## Verification
+
+Run the same core checks used by continuous integration:
+
+```bash
+cd apps/api
+composer validate --strict --no-check-publish
+./vendor/bin/pint --test
+php artisan migrate:status
+php artisan freshmart:health
+php artisan test
+
+cd ../web
+npm run lint
+npm run build
+```
+
+The frontend build is written to `apps/api/public/app`. Open it through the
+configured web server in deployment; the development server remains the
+recommended local workflow.
+
+## Local backups
+
+`php artisan freshmart:backup` creates live-safe SQLite snapshots under
+`apps/api/storage/app/backups`. Do not use the restore command while either
+local server is running. See [BACKUP_AND_RESTORE.md](BACKUP_AND_RESTORE.md).

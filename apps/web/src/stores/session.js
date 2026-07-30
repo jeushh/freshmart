@@ -1,7 +1,23 @@
 import { reactive, readonly } from 'vue'
 import { api } from '../api/http.js'
 
-const state = reactive({ loading: true, authenticated: false, user: null, permissions: [], landingPage: 'dashboard' })
+const defaultSettings = {
+  business_name: 'FreshMart',
+  currency_code: 'PHP',
+  currency_symbol: '₱',
+  currency_locale: 'en-PH',
+  timezone: 'Asia/Manila',
+  tax_rate: 0,
+  tax_inclusive: true
+}
+const state = reactive({
+  loading: true,
+  authenticated: false,
+  user: null,
+  permissions: [],
+  landingPage: 'dashboard',
+  settings: { ...defaultSettings }
+})
 
 async function refresh() {
   state.loading = true
@@ -11,6 +27,7 @@ async function refresh() {
     state.user = data.authenticated ? { username: data.username, fullName: data.full_name, employeeId: data.employee_id } : null
     state.permissions = data.permissions || []
     state.landingPage = data.landing_page || 'dashboard'
+    state.settings = { ...defaultSettings, ...(data.settings || {}) }
   } catch (error) {
     state.authenticated = false
     state.user = null
@@ -21,7 +38,20 @@ async function refresh() {
 }
 async function login(username, password) { await api.login(username, password); return refresh() }
 async function logout() { try { await api.logout() } finally { state.authenticated = false; state.user = null; state.permissions = [] } }
+function expire() {
+  state.authenticated = false
+  state.user = null
+  state.permissions = []
+}
 function can(permission) { return String(permission).split('|').some(p => state.permissions.includes(p)) }
+function updateSettings(settings) {
+  state.settings = { ...defaultSettings, ...(settings || {}) }
+}
+async function refreshSettings() {
+  const data = await api.get('/settings/public')
+  updateSettings(data.settings)
+  return state.settings
+}
 function homePath() {
   const landing = {
     admin: ['/admin', 'system.users.manage|system.roles.manage|system.audit.view|system.settings.manage'],
@@ -33,4 +63,16 @@ function homePath() {
   }[state.landingPage]
   return landing && can(landing[1]) ? landing[0] : '/'
 }
-export const sessionStore = { state: readonly(state), refresh, login, logout, can, homePath }
+window.addEventListener('freshmart:session-expired', expire)
+
+export const sessionStore = {
+  state: readonly(state),
+  refresh,
+  login,
+  logout,
+  can,
+  homePath,
+  expire,
+  updateSettings,
+  refreshSettings
+}

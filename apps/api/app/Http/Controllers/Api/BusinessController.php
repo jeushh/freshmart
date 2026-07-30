@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditLogger;
+use App\Services\SystemSettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -181,7 +182,7 @@ class BusinessController extends Controller
         });
     }
 
-    public function pos()
+    public function pos(SystemSettingsService $settings)
     {
         return [
             'products' => DB::table('products')
@@ -190,11 +191,14 @@ class BusinessController extends Controller
                 ->orderBy('name')
                 ->get(),
             'sales' => DB::table('sales_ledger')->orderByDesc('id')->limit(30)->get(),
+            'settings' => $settings->public(),
         ];
     }
 
-    public function checkout(Request $request)
-    {
+    public function checkout(
+        Request $request,
+        SystemSettingsService $settings,
+    ) {
         $data = $request->validate([
             'items' => 'required|array|min:1|max:100',
             'items.*.product_id' => 'required|integer|distinct|exists:products,id',
@@ -202,17 +206,22 @@ class BusinessController extends Controller
             'payment_method' => 'required|in:Cash,Card,QR',
         ]);
 
-        return DB::transaction(function () use ($data, $request) {
+        return DB::transaction(function () use ($data, $request, $settings) {
             $orderId = 'FM-'.now()->format('YmdHis').'-'.random_int(100, 999);
-            $total = 0;
+            $totalCents = 0;
+            $taxCents = 0;
 
             foreach ($data['items'] as $item) {
                 $product = DB::table('products')->where('id', $item['product_id'])->lockForUpdate()->first();
                 abort_if($product->status !== 'Active', 422, "{$product->name} is not available for sale.");
                 abort_if($product->stock_quantity < $item['quantity'], 422, "Insufficient stock for {$product->name}.");
 
-                $lineTotal = round($product->price * $item['quantity'], 2);
-                $total += $lineTotal;
+                $tax = $settings->calculateTax(
+                    (float) $product->price * $item['quantity'],
+                );
+                $lineTotal = $tax['total'];
+                $totalCents += (int) round($lineTotal * 100);
+                $taxCents += (int) round($tax['tax'] * 100);
                 $newStock = $product->stock_quantity - $item['quantity'];
 
                 DB::table('products')->where('id', $product->id)->update(['stock_quantity' => $newStock]);
@@ -220,7 +229,13 @@ class BusinessController extends Controller
                     'order_id' => $orderId,
                     'item_sku' => $product->sku,
                     'quantity_sold' => $item['quantity'],
+                    'unit_price' => round((float) $product->price, 2),
+                    'subtotal_amount' => $tax['subtotal'],
                     'total_price' => $lineTotal,
+                    'tax_rate' => $tax['rate'],
+                    'tax_amount' => $tax['tax'],
+                    'tax_inclusive' => $tax['inclusive'] ? 1 : 0,
+                    'discount_amount' => 0,
                     'payment_method' => $data['payment_method'],
                     'cashier_username' => $request->user()->username,
                 ]);
@@ -236,7 +251,8 @@ class BusinessController extends Controller
                 ]);
             }
 
-            $total = round($total, 2);
+            $total = $totalCents / 100;
+            $taxTotal = $taxCents / 100;
             DB::table('financial_transactions')->insert([
                 'transaction_type' => 'Sale',
                 'amount' => $total,
@@ -249,10 +265,17 @@ class BusinessController extends Controller
             ]);
             AuditLogger::record($request, 'sale.completed', 'sale', $orderId, [
                 'total' => $total,
+                'tax_total' => $taxTotal,
                 'payment_method' => $data['payment_method'],
             ]);
 
-            return ['order_id' => $orderId, 'total' => $total];
+            return [
+                'order_id' => $orderId,
+                'total' => $total,
+                'tax_total' => $taxTotal,
+                'tax_rate' => $settings->all()['tax_rate'],
+                'tax_inclusive' => $settings->all()['tax_inclusive'],
+            ];
         });
     }
 

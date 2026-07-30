@@ -1,0 +1,129 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Laravel and SQLite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:dGVzdGluZy1vbmx5LWtleS1mb3ItZnJlc2htYXJ0ISE=
+      APP_DEBUG: "false"
+      DB_CONNECTION: sqlite
+      DB_DATABASE: database/ci.sqlite
+      DB_FOREIGN_KEYS: "true"
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      FRESHMART_ADMIN_PASSWORD: testing-admin-password
+      FRESHMART_DEMO_PASSWORD: testing-demo-password
+      FRESHMART_SEED_DEMO: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_sqlite
+          coverage: none
+          tools: composer:v2
+      - name: Prepare Laravel runtime directories
+        run: |
+          mkdir -p bootstrap/cache
+          mkdir -p storage/app
+          mkdir -p storage/framework/cache/data
+          mkdir -p storage/framework/sessions
+          mkdir -p storage/framework/views
+          mkdir -p storage/logs
+      - name: Validate dependency definition
+        run: composer validate --strict --no-check-publish
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Audit PHP dependencies
+        shell: bash
+        run: |
+          set +e
+          output="$(composer audit --locked --no-interaction 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          if printf '%s' "$output" | grep -Eqi 'could not resolve|timed out|network|connection|failed to download'; then
+            echo "::warning::Composer advisory service was unavailable; dependency installation still succeeded."
+            exit 0
+          fi
+          exit "$status"
+      - name: Check PHP syntax
+        run: git ls-files '*.php' -z | xargs -0 -n1 php -l
+      - name: Check code style
+        run: ./vendor/bin/pint --test
+      - name: Rebuild and seed SQLite
+        run: |
+          touch database/ci.sqlite
+          php artisan migrate:fresh --seed --force --no-interaction
+          php artisan migrate:status --no-interaction
+      - name: Verify routes and database integrity
+        run: |
+          php artisan route:list --path=api
+          php -r '$pdo = new PDO("sqlite:database/ci.sqlite"); if ($pdo->query("PRAGMA integrity_check")->fetchColumn() !== "ok" || $pdo->query("PRAGMA foreign_key_check")->fetchAll()) { exit(1); }'
+      - name: Run application health check
+        run: php artisan freshmart:health
+      - name: Run PHP tests
+        run: php artisan test
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-failure-logs
+          path: apps/api/storage/logs/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend:
+    name: Vue
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Audit frontend dependencies
+        shell: bash
+        run: |
+          set +e
+          output="$(npm audit 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          if printf '%s' "$output" | grep -Eqi 'network|fetch failed|timed out|EAI_AGAIN|ENOTFOUND|ECONN'; then
+            echo "::warning::npm advisory service was unavailable; npm ci still succeeded."
+            exit 0
+          fi
+          exit "$status"
+      - name: Lint frontend
+        run: npm run lint
+      - name: Build frontend
+        run: npm run build

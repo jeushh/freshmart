@@ -16,6 +16,9 @@ import AdminView from '../modules/workspaces/AdminView.vue'
 import RolesView from '../modules/workspaces/RolesView.vue'
 import SettingsView from '../modules/workspaces/SettingsView.vue'
 import SelfServiceView from '../modules/workspaces/SelfServiceView.vue'
+import ForbiddenView from '../modules/errors/ForbiddenView.vue'
+import NotFoundView from '../modules/errors/NotFoundView.vue'
+import ReportsView from '../modules/reports/ReportsView.vue'
 
 const routes = [
   { path: '/login', component: LoginView, meta: { public: true } },
@@ -44,9 +47,18 @@ const routes = [
       },
       { path: 'roles', component: RolesView, meta: { permission: 'system.roles.manage' } },
       { path: 'settings', component: SettingsView, meta: { permission: 'system.settings.manage' } },
+      {
+        path: 'reports',
+        component: ReportsView,
+        meta: {
+          permission: 'reports.sales.view|reports.inventory.view|reports.procurement.view|reports.hr.view|reports.payroll.view|reports.finance.view'
+        }
+      },
+      { path: 'forbidden', component: ForbiddenView },
       { path: 'self-service', component: SelfServiceView, meta: { permission: 'employee.self' } }
     ]
-  }
+  },
+  { path: '/:pathMatch(.*)*', component: NotFoundView }
 ]
 
 const router = createRouter({ history: createWebHashHistory(), routes })
@@ -55,7 +67,7 @@ router.beforeEach(async to => {
   if (sessionStore.state.loading) await sessionStore.refresh()
   if (!to.meta.public && !sessionStore.state.authenticated) return '/login'
   if (to.path === '/login' && sessionStore.state.authenticated) return sessionStore.homePath()
-  if (to.meta.permission && !sessionStore.can(to.meta.permission)) return sessionStore.homePath()
+  if (to.meta.permission && !sessionStore.can(to.meta.permission)) return '/forbidden'
 })
 
 export default router

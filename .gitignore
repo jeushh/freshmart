@@ -4,6 +4,8 @@ apps/web/.env
 apps/web/node_modules/
 apps/web/dist/
 database/backups/*.sqlite
+database/backups/*.json
+apps/api/storage/app/backups/
 apps/api/storage/logs/*.log
 apps/api/public/app/
 apps/api/.phpunit.result.cache

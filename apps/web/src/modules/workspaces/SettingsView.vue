@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { api } from '../../api/http.js'
 import PageHeader from '../../components/common/PageHeader.vue'
+import { sessionStore } from '../../stores/session.js'
 
 const groups = ref({})
 const settings = ref({})
@@ -28,6 +29,7 @@ async function save() {
     message.value = ''
     const data = await api.put('/settings', { settings: settings.value })
     groups.value = data.groups
+    sessionStore.updateSettings(settings.value)
     message.value = 'System settings saved.'
   } catch (requestError) {
     error.value = requestError.message
@@ -35,12 +37,22 @@ async function save() {
 }
 
 onMounted(load)
+watch(() => settings.value.currency_code, code => {
+  if (!code) return
+  settings.value.currency_symbol = code === 'PHP' ? '₱' : '$'
+  settings.value.currency_locale = code === 'PHP' ? 'en-PH' : 'en-US'
+})
 </script>
 
 <template>
   <PageHeader title="System Settings" description="Manage approved business and application settings." />
   <p v-if="error" class="form-error">{{ error }}</p>
   <p v-if="message" class="success-message">{{ message }}</p>
+  <div class="notice-panel settings-notice">
+    <strong>Configuration policy</strong>
+    <p>Currency and tax changes apply to new transactions. Historical sales retain the tax snapshots recorded when they were finalized.</p>
+    <p>Database backups and restores are intentionally available only through the protected server command line.</p>
+  </div>
 
   <form class="settings-form" @submit.prevent="save">
     <fieldset v-for="(fields, group) in groups" :key="group">

@@ -112,19 +112,44 @@ php artisan migrate:fresh --seed
 
 This is a destructive reset. Back up any data you need first.
 
-## SQLite backups
+## Reports and operational commands
 
-Stop the API before copying a live local database, then use SQLite's backup
-command so WAL data is included safely:
+FreshMart includes role-aware dashboards and permission-scoped sales,
+inventory, procurement, HR, payroll, and finance reports. Reports support
+validated date filters, pagination, spreadsheet-safe CSV export, and
+print-ready output. Currency, timezone, and tax behavior come from allowlisted
+system settings; finalized sales retain their own tax snapshots.
+
+Create a consistent online SQLite backup with a checksum manifest:
 
 ```bash
-mkdir -p database/backups
-sqlite3 apps/api/database/database.sqlite \
-  ".backup 'database/backups/freshmart-$(date +%Y%m%d-%H%M%S).sqlite'"
+cd apps/api
+php artisan freshmart:backup
+php artisan freshmart:health
 ```
 
-Restore only into a stopped, disposable/local environment. Keep
-`database/freshmart.sqlite` unchanged as the legacy reference database.
+Restore is a deliberate command-line-only operation. Stop every API process,
+verify the selected target, and use the explicit confirmation flag:
 
-See [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) for the schema map and
-documented differences from the legacy database.
+```bash
+php artisan freshmart:restore freshmart-YYYYMMDD-HHMMSS.sqlite --confirm
+```
+
+The restore validates the manifest, SHA-256 checksum, SQLite integrity, and
+foreign keys, and creates a pre-restore safety backup. Both backup and restore
+refuse to operate on `database/freshmart.sqlite`.
+
+## Documentation
+
+- [Reporting](docs/REPORTING.md)
+- [Backup and restore](docs/BACKUP_AND_RESTORE.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Operations](docs/OPERATIONS.md)
+- [Security](docs/SECURITY.md)
+- [Local development](docs/LOCAL_DEVELOPMENT.md)
+- [Test accounts](docs/TEST_ACCOUNTS.md)
+- [Database schema](docs/DATABASE_SCHEMA.md)
+
+Pull requests and pushes to `main` run PHP dependency validation/audit, syntax,
+Pint, migrations, seeders, SQLite checks, health checks, PHPUnit, frontend
+dependency audit, ESLint, and the production Vite build.
