@@ -106,6 +106,10 @@ class PurchaseOrderController extends Controller
                             - $item->damaged_quantity
                             - $item->rejected_quantity;
                         $item->fulfilled_quantity = $item->accepted_quantity;
+                        $item->accepted_cost = round(
+                            $item->accepted_quantity * $item->unit_cost,
+                            2,
+                        );
 
                         return $item;
                     });

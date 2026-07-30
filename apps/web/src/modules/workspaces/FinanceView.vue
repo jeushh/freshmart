@@ -4,18 +4,16 @@ import { api } from '../../api/http.js'
 import { sessionStore } from '../../stores/session.js'
 import PageHeader from '../../components/common/PageHeader.vue'
 import WorkspaceTable from '../../components/common/WorkspaceTable.vue'
+import { formatMoney } from '../../utils/formatters.js'
 
 const requests = ref([])
 const transactions = ref([])
 const error = ref('')
-const money = value => new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD'
-}).format(value || 0)
 
 async function load() {
   try {
     error.value = ''
+    await sessionStore.refreshSettings()
     const pending = []
 
     if (sessionStore.can('finance.requests.view')) {
@@ -66,7 +64,7 @@ onMounted(load)
       ]"
       :rows="requests"
     >
-      <template #cell-amount="{ row }">{{ money(row.amount) }}</template>
+      <template #cell-amount="{ row }">{{ formatMoney(row.amount) }}</template>
       <template v-if="sessionStore.can('finance.requests.approve')" #actions="{ row }">
         <button v-if="row.status === 'Pending'" @click="decide(row.id, 'Approved')">Approve</button>
         <button v-if="row.status === 'Pending'" @click="decide(row.id, 'Rejected')">Reject</button>
@@ -87,7 +85,7 @@ onMounted(load)
       ]"
       :rows="transactions"
     >
-      <template #cell-amount="{ row }">{{ money(row.amount) }}</template>
+      <template #cell-amount="{ row }">{{ formatMoney(row.amount) }}</template>
     </WorkspaceTable>
   </template>
 </template>

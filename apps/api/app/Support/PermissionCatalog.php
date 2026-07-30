@@ -10,6 +10,7 @@ final class PermissionCatalog
             'system.roles.manage' => 'Manage roles and permissions',
             'system.audit.view' => 'View audit activity',
             'system.settings.manage' => 'Manage system settings',
+            'system.backups.manage' => 'Manage local database backups',
         ],
         'Point of sale and sales' => [
             'pos.access' => 'Use point of sale',
@@ -38,6 +39,15 @@ final class PermissionCatalog
             'finance.requests.view' => 'View finance requests',
             'finance.requests.approve' => 'Approve, reject, or pay finance requests',
             'finance.manage' => 'View finance ledgers and expenses',
+        ],
+        'Reports' => [
+            'reports.sales.view' => 'View sales reports',
+            'reports.inventory.view' => 'View inventory reports',
+            'reports.procurement.view' => 'View procurement reports',
+            'reports.hr.view' => 'View HR reports',
+            'reports.payroll.view' => 'View payroll reports',
+            'reports.finance.view' => 'View finance reports',
+            'reports.export' => 'Export authorized reports',
         ],
         'Employee' => [
             'employee.self' => 'Use employee self-service',

@@ -9,6 +9,7 @@ const items = [
   ['Payroll','/payroll','payroll.manage'], ['Inventory','/inventory','inventory.manage|restock.approve'],
   ['Restock Requests','/restock-requests','restock.request|restock.approve'],
   ['Purchase Orders','/purchase-orders','procurement.purchase_orders.view'],
+  ['Reports','/reports','reports.sales.view|reports.inventory.view|reports.procurement.view|reports.hr.view|reports.payroll.view|reports.finance.view'],
   ['Finance','/finance','finance.requests.view|finance.manage'], ['Self-Service','/self-service','employee.self'],
   ['Administration','/admin','system.users.manage|system.audit.view'],
   ['Roles & Permissions','/roles','system.roles.manage'], ['System Settings','/settings','system.settings.manage']

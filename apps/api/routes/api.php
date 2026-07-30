@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\HrRequestController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\PurchaseOrderController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RestockRequestController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\StockReceivingController;
@@ -74,7 +75,24 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/roles/{role}', [RoleController::class, 'update'])->middleware('permission:system.roles.manage');
 
     Route::get('/settings', [SystemSettingController::class, 'index'])->middleware('permission:system.settings.manage');
+    Route::get('/settings/public', [SystemSettingController::class, 'publicSettings']);
     Route::put('/settings', [SystemSettingController::class, 'update'])->middleware('permission:system.settings.manage');
+
+    foreach ([
+        'sales' => 'reports.sales.view',
+        'inventory' => 'reports.inventory.view',
+        'procurement' => 'reports.procurement.view',
+        'hr' => 'reports.hr.view',
+        'payroll' => 'reports.payroll.view',
+        'finance' => 'reports.finance.view',
+    ] as $report => $permission) {
+        Route::get("/reports/{$report}", [ReportController::class, 'show'])
+            ->defaults('report', $report)
+            ->middleware("permission:{$permission}");
+        Route::get("/reports/{$report}/export", [ReportController::class, 'export'])
+            ->defaults('report', $report)
+            ->middleware("permission:{$permission}");
+    }
 
     Route::get('/workspace/self', [BusinessController::class, 'self'])->middleware('permission:employee.self');
     Route::post('/workspace/self/request', [BusinessController::class, 'submitSelf'])->middleware('permission:employee.self');

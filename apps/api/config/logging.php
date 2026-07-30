@@ -2,4 +2,4 @@
 
 use Monolog\Handler\NullHandler;
 
-return ['default' => env('LOG_CHANNEL', 'stack'), 'channels' => ['stack' => ['driver' => 'stack', 'channels' => ['single'], 'ignore_exceptions' => false], 'single' => ['driver' => 'single', 'path' => storage_path('logs/laravel.log'), 'level' => env('LOG_LEVEL', 'debug'), 'replace_placeholders' => true], 'null' => ['driver' => 'monolog', 'handler' => NullHandler::class]]];
+return ['default' => env('LOG_CHANNEL', 'stack'), 'channels' => ['stack' => ['driver' => 'stack', 'channels' => explode(',', env('LOG_STACK', 'single')), 'ignore_exceptions' => false], 'single' => ['driver' => 'single', 'path' => storage_path('logs/laravel.log'), 'level' => env('LOG_LEVEL', 'debug'), 'replace_placeholders' => true], 'daily' => ['driver' => 'daily', 'path' => storage_path('logs/laravel.log'), 'level' => env('LOG_LEVEL', 'warning'), 'days' => (int) env('LOG_DAILY_DAYS', 14), 'replace_placeholders' => true], 'null' => ['driver' => 'monolog', 'handler' => NullHandler::class]]];

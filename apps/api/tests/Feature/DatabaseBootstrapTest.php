@@ -59,6 +59,9 @@ class DatabaseBootstrapTest extends TestCase
         $this->assertTrue(Schema::hasColumn('roles', 'is_system'));
         $this->assertTrue(Schema::hasColumn('purchase_orders', 'approval_status'));
         $this->assertTrue(Schema::hasColumn('purchase_orders', 'reviewed_by'));
+        $this->assertTrue(Schema::hasColumn('sales_ledger', 'tax_rate'));
+        $this->assertTrue(Schema::hasColumn('sales_ledger', 'tax_amount'));
+        $this->assertTrue(Schema::hasColumn('sales_ledger', 'discount_amount'));
         $this->assertDatabaseHas('admin_users', [
             'username' => 'admin',
             'status' => 'Active',
@@ -77,6 +80,12 @@ class DatabaseBootstrapTest extends TestCase
         );
         $this->assertContains('procurement.purchase_orders.manage', $inventoryPermissions);
         $this->assertContains('procurement.stock.receive', $inventoryPermissions);
+        $this->assertContains('reports.inventory.view', $inventoryPermissions);
+        $this->assertContains('reports.procurement.view', $inventoryPermissions);
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => 'currency_code',
+            'setting_value' => 'PHP',
+        ]);
     }
 
     public function test_seeders_are_repeatable_without_creating_duplicates(): void

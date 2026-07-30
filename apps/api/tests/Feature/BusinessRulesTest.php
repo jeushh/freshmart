@@ -115,10 +115,22 @@ class BusinessRulesTest extends TestCase
         $this->actingAs(User::where('username', 'admin')->firstOrFail());
         $this->getJson('/api/dashboard')
             ->assertOk()
-            ->assertJsonStructure(['employees', 'low_stock', 'pending_payroll', 'pending_finance_requests']);
+            ->assertJsonStructure([
+                'generated_at',
+                'timezone',
+                'settings',
+                'metrics',
+                'sections',
+                'charts',
+            ])
+            ->assertJsonPath('settings.currency_code', 'PHP');
 
         $this->actingAs(User::where('username', 'employee')->firstOrFail());
-        $this->getJson('/api/dashboard')->assertOk()->assertExactJson([]);
+        $this->getJson('/api/dashboard')
+            ->assertOk()
+            ->assertJsonPath('sections.employee.linked', true)
+            ->assertJsonMissingPath('sections.system_health')
+            ->assertJsonMissingPath('sections.recent_financial_transactions');
     }
 
     public function test_employee_update_preserves_hire_date_when_it_is_not_submitted(): void

@@ -55,6 +55,11 @@ these deliberate integrity improvements:
 - Product and employee status/pay-type fields now have database-level checks.
 - Query-backed employee, product supplier, finance request, HR request, and
   financial transaction reference indexes were added.
+- New finalized sales snapshot columns record unit price, subtotal, tax rate,
+  tax amount, tax-inclusion mode, and discount amount. Legacy rows remain null
+  where the old schema did not record those facts.
+- Reporting indexes cover sales dates/cashiers, refunds, purchase orders,
+  receiving dates, payroll, HR requests, finance transactions, and payables.
 - Laravel support tables are new; they were not part of the legacy database.
 
 No application table or column from the committed reference schema was

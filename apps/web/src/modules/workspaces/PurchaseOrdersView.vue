@@ -4,6 +4,7 @@ import { api } from '../../api/http.js'
 import { sessionStore } from '../../stores/session.js'
 import PageHeader from '../../components/common/PageHeader.vue'
 import WorkspaceTable from '../../components/common/WorkspaceTable.vue'
+import { formatMoney } from '../../utils/formatters.js'
 
 const orders = ref([])
 const suppliers = ref([])
@@ -55,14 +56,11 @@ const canCancelSelected = computed(() => {
   return ['Draft', 'Submitted'].includes(state)
     && sessionStore.can('procurement.purchase_orders.manage')
 })
-const money = value => new Intl.NumberFormat('en-PH', {
-  style: 'currency',
-  currency: 'PHP'
-}).format(value || 0)
 
 async function load(refreshSelected = false) {
   try {
     error.value = ''
+    await sessionStore.refreshSettings()
     const params = Object.fromEntries(Object.entries(filters.value).filter(([, value]) => value))
     const data = await api.get('/purchase-orders', { ...params, per_page: 100 })
     orders.value = data.orders.data
@@ -233,12 +231,12 @@ onMounted(load)
       </select>
       <input v-model.number="line.quantity" type="number" min="1" placeholder="Quantity" required>
       <input v-model.number="line.unit_cost" type="number" min="0" step=".01" placeholder="Unit cost" required>
-      <strong>{{ money(Number(line.quantity || 0) * Number(line.unit_cost || 0)) }}</strong>
+      <strong>{{ formatMoney(Number(line.quantity || 0) * Number(line.unit_cost || 0)) }}</strong>
       <button class="secondary-button" type="button" @click="removeLine(index)">Remove</button>
     </div>
     <div class="form-actions">
       <button class="secondary-button" type="button" @click="addLine">Add line</button>
-      <strong>Display total: {{ money(formTotal) }}</strong>
+      <strong>Display total: {{ formatMoney(formTotal) }}</strong>
       <button class="primary-button">{{ form.id ? 'Update draft' : 'Create draft' }}</button>
       <button v-if="form.id" class="secondary-button" type="button" @click="form = blankForm()">Cancel edit</button>
     </div>
@@ -270,7 +268,7 @@ onMounted(load)
     ]"
     :rows="orders"
   >
-    <template #cell-total_amount="{ row }">{{ money(row.total_amount) }}</template>
+    <template #cell-total_amount="{ row }">{{ formatMoney(row.total_amount) }}</template>
     <template #cell-approval_status="{ row }"><span class="status-badge">{{ row.approval_status }}</span></template>
     <template #cell-status="{ row }"><span class="status-badge">{{ row.status }}</span></template>
     <template #cell-total_fulfilled="{ row }">{{ row.total_fulfilled }} / {{ row.total_ordered }}</template>
@@ -281,7 +279,7 @@ onMounted(load)
     <div class="detail-heading">
       <div>
         <h2>{{ selected.order.po_number }}</h2>
-        <p>{{ selected.order.supplier_name }} · Server total {{ money(selected.order.total_amount) }}</p>
+        <p>{{ selected.order.supplier_name }} · Server total {{ formatMoney(selected.order.total_amount) }}</p>
       </div>
       <div class="form-actions">
         <button
@@ -321,8 +319,8 @@ onMounted(load)
       ]"
       :rows="selected.items"
     >
-      <template #cell-unit_cost="{ row }">{{ money(row.unit_cost) }}</template>
-      <template #cell-line_total="{ row }">{{ money(row.line_total) }}</template>
+      <template #cell-unit_cost="{ row }">{{ formatMoney(row.unit_cost) }}</template>
+      <template #cell-line_total="{ row }">{{ formatMoney(row.line_total) }}</template>
     </WorkspaceTable>
 
     <form
@@ -355,10 +353,15 @@ onMounted(load)
           { key: 'delivered_quantity', label: 'Delivered' },
           { key: 'accepted_quantity', label: 'Accepted / fulfilled' },
           { key: 'damaged_quantity', label: 'Damaged' },
-          { key: 'rejected_quantity', label: 'Rejected' }
+          { key: 'rejected_quantity', label: 'Rejected' },
+          { key: 'unit_cost', label: 'Unit cost' },
+          { key: 'accepted_cost', label: 'Accepted cost' }
         ]"
         :rows="history.items"
-      />
+      >
+        <template #cell-unit_cost="{ row }">{{ formatMoney(row.unit_cost) }}</template>
+        <template #cell-accepted_cost="{ row }">{{ formatMoney(row.accepted_cost) }}</template>
+      </WorkspaceTable>
     </article>
   </section>
 </template>
