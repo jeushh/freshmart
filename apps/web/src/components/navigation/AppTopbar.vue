@@ -6,7 +6,7 @@ import UiDropdownMenu from '../ui/UiDropdownMenu.vue'
 
 const { logout, signingOut } = useLogout()
 
-const accessLabels = {
+const workspaceLabels = {
   admin: 'Administration',
   pos: 'Point of Sale',
   hr: 'Human Resources',
@@ -22,8 +22,8 @@ const displayName = computed(() =>
     || 'FreshMart user'
 )
 const username = computed(() => sessionStore.state.user?.username || 'Signed in')
-const roleLabel = computed(() =>
-  accessLabels[sessionStore.state.landingPage] || accessLabels.dashboard
+const workspaceLabel = computed(() =>
+  workspaceLabels[sessionStore.state.landingPage] || workspaceLabels.dashboard
 )
 const initials = computed(() => displayName.value
   .split(/\s+/)
@@ -34,7 +34,7 @@ const initials = computed(() => displayName.value
 const userMenuItems = computed(() => [
   {
     key: 'identity',
-    label: `${displayName.value}, ${roleLabel.value}`,
+    label: `${displayName.value}, ${workspaceLabel.value}`,
     disabled: true
   },
   {
@@ -64,7 +64,7 @@ function onMenuSelect(item) {
         <span class="fm-topbar__avatar" aria-hidden="true">{{ initials }}</span>
         <span class="fm-topbar__user-copy">
           <strong>{{ displayName }}</strong>
-          <small>{{ roleLabel }}</small>
+          <small>{{ workspaceLabel }}</small>
         </span>
         <svg class="fm-topbar__chevron" viewBox="0 0 24 24" aria-hidden="true">
           <path d="m8 10 4 4 4-4" />
@@ -74,7 +74,7 @@ function onMenuSelect(item) {
       <template #item="{ item }">
         <span v-if="item.key === 'identity'" class="fm-topbar__menu-identity">
           <strong>{{ displayName }}</strong>
-          <small>{{ roleLabel }} · @{{ username }}</small>
+          <small>{{ workspaceLabel }} · @{{ username }}</small>
         </span>
         <span v-else class="fm-topbar__menu-action">
           <svg viewBox="0 0 24 24" aria-hidden="true">
