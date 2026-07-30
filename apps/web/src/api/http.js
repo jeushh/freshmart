@@ -1,10 +1,17 @@
 import axios from 'axios'
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+const configuredApiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000')
+  .replace(/\/+$/, '')
+// The development proxy keeps Safari's Sanctum cookies first-party even when
+// localhost and 127.0.0.1 are used on opposite sides of the connection.
+const baseUrl = import.meta.env.DEV ? '' : configuredApiUrl
+const credentialConfig = {
+  withCredentials: true,
+  withXSRFToken: true
+}
 const http = axios.create({
   baseURL: `${baseUrl}/api`,
-  withCredentials: true,
-  withXSRFToken: true,
+  ...credentialConfig,
   headers: {
     Accept: 'application/json',
     'Content-Type': 'application/json'
@@ -41,10 +48,7 @@ async function request(config) {
 }
 
 export const api = {
-  csrf: () => axios.get(`${baseUrl}/sanctum/csrf-cookie`, {
-    withCredentials: true,
-    withXSRFToken: true
-  }),
+  csrf: () => axios.get(`${baseUrl}/sanctum/csrf-cookie`, credentialConfig),
   session: async () => {
     try {
       const data = await request({ url: '/me' })
