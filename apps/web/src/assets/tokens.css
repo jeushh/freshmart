@@ -71,6 +71,7 @@
   --fm-radius-card: 0.75rem;
   --fm-radius-panel: 1rem;
   --fm-radius-pill: 9999px;
+  --fm-border-width: 1px;
 
   --fm-shadow-card: 0 1px 2px rgb(15 23 42 / 5%);
   --fm-shadow-menu: 0 12px 28px rgb(15 23 42 / 12%);
@@ -80,6 +81,11 @@
   --fm-control-height-md: 2.5rem;
   --fm-control-height-lg: 2.75rem;
   --fm-content-width: 94rem;
+  --fm-shell-sidebar-width: 16rem;
+  --fm-shell-header-height: 4rem;
+  --fm-shell-content-gutter: clamp(var(--fm-space-4), 2.5vw, var(--fm-space-8));
+  --fm-shell-z-header: 30;
+  --fm-shell-z-sidebar: 40;
   --fm-transition-fast: 120ms ease;
   --fm-transition-base: 180ms ease;
   --fm-z-dropdown: 50;
