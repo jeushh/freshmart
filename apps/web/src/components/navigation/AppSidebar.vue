@@ -117,6 +117,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         variant="ghost"
         icon-only
         :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :aria-expanded="!collapsed"
         :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
         @click="toggleCollapsed"
       >
