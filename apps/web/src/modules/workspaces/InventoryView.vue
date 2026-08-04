@@ -50,7 +50,10 @@ async function load() {
   try {
     error.value = ''
     await sessionStore.refreshSettings()
-    const data = await api.get('/workspace/inventory', { search: search.value, per_page: 100 })
+    const params = { per_page: 100 }
+    const searchTerm = search.value.trim()
+    if (searchTerm) params.search = searchTerm
+    const data = await api.get('/workspace/inventory', params)
     rows.value = data.products.data
     lowStockRows.value = data.low_stock_products
     movements.value = data.inventory_movements
