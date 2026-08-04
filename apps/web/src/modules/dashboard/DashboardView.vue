@@ -406,7 +406,7 @@ onMounted(load)
       </section>
 
       <section
-        v-if="inventorySummary.length || approvalQueues.length || summarySections.length"
+        v-if="inventorySummary.length || approvalQueues.length || summarySections.length || accountsReceivable || employeeSection"
         class="fm-dashboard__grid"
         aria-label="Dashboard summaries"
       >
