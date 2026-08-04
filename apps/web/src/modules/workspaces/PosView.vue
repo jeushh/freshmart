@@ -39,6 +39,13 @@ function add(product) {
   else if (!existing && product.stock_quantity > 0) cart.value.push({ ...product, quantity: 1 })
 }
 
+function decrement(item) {
+  const index = cart.value.findIndex(cartItem => cartItem.id === item.id)
+  if (index < 0) return
+  if (cart.value[index].quantity === 1) cart.value.splice(index, 1)
+  else cart.value[index].quantity--
+}
+
 async function checkout() {
   try {
     error.value = ''
@@ -76,7 +83,20 @@ onMounted(load)
       <h2>Current sale</h2>
       <div v-for="item in cart" :key="item.id" class="cart-line">
         <span>{{ item.name }} × {{ item.quantity }}</span>
-        <strong>{{ formatMoney(item.price * item.quantity) }}</strong>
+        <span class="cart-line__actions">
+          <strong>{{ formatMoney(item.price * item.quantity) }}</strong>
+          <button
+            type="button"
+            class="icon-button cart-line__decrement"
+            :aria-label="`Remove one ${item.name}`"
+            :title="`Remove one ${item.name}`"
+            @click="decrement(item)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </button>
+        </span>
       </div>
       <p v-if="!cart.length">Cart is empty.</p>
       <div class="sale-totals">
@@ -92,3 +112,25 @@ onMounted(load)
     </aside>
   </div>
 </template>
+
+<style scoped>
+.cart-line__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cart-line .cart-line__decrement {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin-top: 0;
+  padding: 7px;
+  border: 1px solid #dce4de;
+}
+
+.cart-line__decrement svg {
+  width: 18px;
+  height: 18px;
+}
+</style>
