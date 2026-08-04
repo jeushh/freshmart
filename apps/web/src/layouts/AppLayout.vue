@@ -1,19 +1,49 @@
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import AppSidebar from '../components/navigation/AppSidebar.vue'
 import AppTopbar from '../components/navigation/AppTopbar.vue'
-import { sessionStore } from '../stores/session.js'
-const mobileOpen = ref(false)
-const router = useRouter()
-async function signOut() { await sessionStore.logout(); router.replace('/login') }
+import { useSidebarState } from '../composables/useSidebarState.js'
+
+const { collapsed, mobileOpen } = useSidebarState()
 </script>
+
 <template>
-  <div class="app-shell">
-    <AppSidebar :open="mobileOpen" @close="mobileOpen=false" />
-    <div class="app-main">
-      <AppTopbar @menu="mobileOpen=true" @logout="signOut" />
-      <main class="page-container"><RouterView /></main>
+  <div class="fm-shell" :class="{ 'fm-shell--sidebar-collapsed': collapsed }">
+    <aside
+      class="fm-shell__sidebar"
+      :class="{ 'fm-shell__sidebar--open': mobileOpen }"
+      aria-label="Application sidebar"
+    >
+      <AppSidebar />
+    </aside>
+
+    <div class="fm-shell__body">
+      <header class="fm-shell__header">
+        <slot name="header">
+          <AppTopbar />
+        </slot>
+      </header>
+
+      <main id="main-content" class="fm-shell__main" tabindex="-1">
+        <div
+          v-if="$slots.breadcrumbs || $slots.pageActions"
+          class="fm-shell__context"
+        >
+          <nav
+            v-if="$slots.breadcrumbs"
+            class="fm-shell__breadcrumbs"
+            aria-label="Breadcrumb"
+          >
+            <slot name="breadcrumbs"></slot>
+          </nav>
+          <div v-if="$slots.pageActions" class="fm-shell__page-actions">
+            <slot name="pageActions"></slot>
+          </div>
+        </div>
+
+        <div class="fm-shell__content">
+          <RouterView />
+        </div>
+      </main>
     </div>
   </div>
 </template>
