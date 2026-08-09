@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use Database\Seeders\DemoDataSeeder;
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -72,8 +74,8 @@ class DatabaseBootstrapTest extends TestCase
             DB::table('admin_users')->where('username', 'admin')->value('password_hash'),
         ));
         $this->assertSame(3, DB::table('employees')->count());
-        $this->assertSame(3, DB::table('suppliers')->count());
-        $this->assertSame(8, DB::table('products')->count());
+        $this->assertSame(6, DB::table('suppliers')->count());
+        $this->assertSame(50, DB::table('products')->count());
         $inventoryPermissions = json_decode(
             DB::table('roles')->where('name', 'Inventory Staff')->value('permissions'),
             true,
@@ -128,6 +130,78 @@ class DatabaseBootstrapTest extends TestCase
         $this->artisan('db:seed', ['--force' => true])->assertExitCode(0);
 
         $this->assertSame($counts, $this->seededCounts());
+    }
+
+    public function test_demo_catalog_is_unique_linked_idempotent_and_preserves_unknown_products(): void
+    {
+        $this->assertSame(50, DB::table('products')->count());
+        $this->assertSame(50, DB::table('products')->distinct()->count('sku'));
+        $this->assertSame(0, DB::table('products')
+            ->leftJoin('suppliers', 'suppliers.id', '=', 'products.supplier_id')
+            ->whereNull('suppliers.id')
+            ->count());
+
+        $manualProduct = [
+            'name' => 'Teacher Test Product',
+            'sku' => 'CUSTOM-CLASSROOM-001',
+            'price' => 123.45,
+            'category' => 'Classroom',
+            'stock_quantity' => 17,
+            'unit' => 'piece',
+            'emoji' => '🧪',
+            'cost_price' => 80.25,
+            'reorder_level' => 4,
+            'min_stock' => 2,
+            'max_stock' => 40,
+            'supplier_id' => DB::table('suppliers')->value('id'),
+            'status' => 'Inactive',
+        ];
+        DB::table('products')->insert($manualProduct);
+        $beforeReseed = (array) DB::table('products')
+            ->where('sku', $manualProduct['sku'])
+            ->first();
+
+        app(DemoDataSeeder::class)->run();
+        app(DemoDataSeeder::class)->run();
+
+        $this->assertSame(51, DB::table('products')->count());
+        $this->assertSame(51, DB::table('products')->distinct()->count('sku'));
+        $this->assertSame(
+            $beforeReseed,
+            (array) DB::table('products')->where('sku', $manualProduct['sku'])->first(),
+        );
+    }
+
+    public function test_demo_seeder_is_a_true_no_op_when_disabled(): void
+    {
+        $this->setDemoSeedFlag(false);
+
+        try {
+            $this->assertFalse(filter_var(env('FRESHMART_SEED_DEMO'), FILTER_VALIDATE_BOOL));
+            foreach ([
+                'inventory_movements',
+                'hr_requests',
+                'finance_requests',
+                'payroll',
+                'attendance_logs',
+                'admin_users',
+                'products',
+                'suppliers',
+                'employees',
+            ] as $table) {
+                DB::table($table)->delete();
+            }
+            $this->assertSame(0, DB::table('products')->count());
+            app(DemoDataSeeder::class)->run();
+
+            $this->assertSame(0, DB::table('products')->count());
+            $this->assertSame(0, DB::table('employees')->count());
+            $this->assertSame(0, DB::table('suppliers')->count());
+            $this->assertSame(0, DB::table('admin_users')->count());
+            $this->assertSame(0, DB::table('attendance_logs')->count());
+        } finally {
+            $this->setDemoSeedFlag(true);
+        }
     }
 
     public function test_rebuilt_database_has_foreign_keys_enabled_and_passes_sqlite_checks(): void
@@ -203,5 +277,18 @@ class DatabaseBootstrapTest extends TestCase
             'finance_requests' => DB::table('finance_requests')->count(),
             'payroll' => DB::table('payroll')->count(),
         ];
+    }
+
+    private function setDemoSeedFlag(bool $enabled): void
+    {
+        $value = $enabled ? 'true' : 'false';
+        putenv("FRESHMART_SEED_DEMO={$value}");
+        $_ENV['FRESHMART_SEED_DEMO'] = $value;
+        $_SERVER['FRESHMART_SEED_DEMO'] = $value;
+        if ($enabled) {
+            Env::enablePutenv();
+        } else {
+            Env::disablePutenv();
+        }
     }
 }
