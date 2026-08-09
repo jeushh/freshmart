@@ -31,6 +31,7 @@ class PosCheckoutReceiptResponseTest extends TestCase
 
         $cashier = User::where('username', 'cashier')->firstOrFail();
         $this->actingAs($cashier);
+        $databaseTimestampBefore = DB::selectOne("SELECT datetime('now') AS value")->value;
         Carbon::setTestNow('2026-08-09 10:11:12');
 
         try {
@@ -83,6 +84,7 @@ class PosCheckoutReceiptResponseTest extends TestCase
         } finally {
             Carbon::setTestNow();
         }
+        $databaseTimestampAfter = DB::selectOne("SELECT datetime('now') AS value")->value;
 
         $orderId = $response->json('order_id');
         $this->assertMatchesRegularExpression('/^FM-20260809101112-\d{3}$/', $orderId);
@@ -111,7 +113,8 @@ class PosCheckoutReceiptResponseTest extends TestCase
             $this->assertSame($total, (float) $ledger->total_price);
             $this->assertSame('Card', $ledger->payment_method);
             $this->assertSame('cashier', $ledger->cashier_username);
-            $this->assertSame('2026-08-09 02:11:12', $ledger->timestamp);
+            $this->assertGreaterThanOrEqual($databaseTimestampBefore, $ledger->timestamp);
+            $this->assertLessThanOrEqual($databaseTimestampAfter, $ledger->timestamp);
         }
 
         $lines = collect($response->json('items'));

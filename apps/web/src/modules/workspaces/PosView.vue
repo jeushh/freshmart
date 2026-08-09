@@ -14,6 +14,9 @@ const error = ref('')
 const confirming = ref(false)
 const submitting = ref(false)
 const completedSale = ref(null)
+const productsReady = ref(false)
+const refreshingProducts = ref(false)
+const productRefreshError = ref('')
 const checkoutButton = ref(null)
 const cancelButton = ref(null)
 const dialogPanel = ref(null)
@@ -31,13 +34,22 @@ const total = computed(() => sessionStore.state.settings.tax_inclusive
 const subtotal = computed(() => total.value - tax.value)
 
 async function load() {
+  refreshingProducts.value = true
+  productsReady.value = false
   try {
-    error.value = ''
     const data = await api.get('/workspace/pos')
     products.value = data.products
     sessionStore.updateSettings(data.settings)
+    productRefreshError.value = ''
+    error.value = ''
+    productsReady.value = true
+    return true
   } catch (requestError) {
+    productRefreshError.value = requestError.message
     error.value = requestError.message
+    return false
+  } finally {
+    refreshingProducts.value = false
   }
 }
 
@@ -55,7 +67,7 @@ function decrement(item) {
 }
 
 async function openConfirmation() {
-  if (!cart.value.length || submitting.value) return
+  if (!cart.value.length || !productsReady.value || submitting.value) return
   confirming.value = true
   await nextTick()
   cancelButton.value?.focus()
@@ -144,12 +156,14 @@ function printReceipt() {
   window.print()
 }
 
-function newSale() {
+async function newSale() {
+  const refreshRequired = !productsReady.value || Boolean(productRefreshError.value)
   completedSale.value = null
   cart.value = []
   payment.value = 'Cash'
   message.value = ''
-  error.value = ''
+  if (refreshRequired) await load()
+  else error.value = ''
 }
 
 async function checkout() {
@@ -185,6 +199,16 @@ onMounted(load)
         <UiButton @click="newSale">New sale</UiButton>
       </div>
     </PageHeader>
+
+    <div v-if="productRefreshError" class="form-error receipt-refresh-error" role="alert">
+      <div>
+        <strong>Sale completed, but products could not be refreshed.</strong>
+        <span>{{ productRefreshError }}</span>
+      </div>
+      <UiButton variant="secondary" :loading="refreshingProducts" loading-label="Refreshing products" @click="load">
+        Retry refresh
+      </UiButton>
+    </div>
 
     <article class="receipt" aria-labelledby="receipt-title">
       <header class="receipt__header">
@@ -229,12 +253,23 @@ onMounted(load)
 
   <template v-else>
     <PageHeader title="Point of Sale" description="Process sales with automatic stock, tax, and ledger updates." />
-    <p v-if="error" class="form-error">{{ error }}</p>
+    <div v-if="error" class="form-error pos-error" role="alert">
+      <span>{{ error }}</span>
+      <UiButton
+        v-if="!productsReady"
+        variant="secondary"
+        :loading="refreshingProducts"
+        loading-label="Refreshing products"
+        @click="load"
+      >
+        Retry products
+      </UiButton>
+    </div>
     <p v-if="message" class="success-message">{{ message }}</p>
     <div class="pos-layout">
       <section>
-        <div class="product-grid">
-          <button v-for="product in products" :key="product.id" class="product-card" :disabled="product.stock_quantity < 1" @click="add(product)">
+        <div class="product-grid" :aria-busy="refreshingProducts || undefined">
+          <button v-for="product in products" :key="product.id" class="product-card" :disabled="!productsReady || product.stock_quantity < 1" @click="add(product)">
             <strong>{{ product.emoji }} {{ product.name }}</strong>
             <span>{{ formatMoney(product.price) }}</span>
             <small>{{ product.stock_quantity }} in stock</small>
@@ -270,7 +305,7 @@ onMounted(load)
           <div class="cart-total"><span>Total</span><strong>{{ formatMoney(total) }}</strong></div>
         </div>
         <select v-model="payment"><option>Cash</option><option>Card</option><option>QR</option></select>
-        <UiButton ref="checkoutButton" class="checkout-button" :disabled="!cart.length" @click="openConfirmation">
+        <UiButton ref="checkoutButton" class="checkout-button" :disabled="!cart.length || !productsReady" @click="openConfirmation">
           Review sale
         </UiButton>
       </aside>
@@ -357,6 +392,25 @@ onMounted(load)
 
 .receipt-page {
   min-width: 0;
+}
+
+.receipt-refresh-error,
+.pos-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fm-space-4);
+  margin-bottom: var(--fm-space-5);
+}
+
+.receipt-refresh-error > div {
+  display: grid;
+  gap: var(--fm-space-1);
+}
+
+.receipt-refresh-error .ui-button,
+.pos-error .ui-button {
+  flex: 0 0 auto;
 }
 
 .receipt-actions {
@@ -596,6 +650,12 @@ onMounted(load)
 }
 
 @media (max-width: 30rem) {
+  .receipt-refresh-error,
+  .pos-error {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .receipt-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;

@@ -259,7 +259,6 @@ class BusinessController extends Controller
 
         return DB::transaction(function () use ($data, $request, $settings) {
             $orderId = 'FM-'.now()->format('YmdHis').'-'.random_int(100, 999);
-            $completedAt = now()->utc();
             $cashierUsername = $request->user()->username;
             $paymentMethod = $data['payment_method'];
             $subtotalCents = 0;
@@ -297,7 +296,6 @@ class BusinessController extends Controller
                     'discount_amount' => 0,
                     'payment_method' => $paymentMethod,
                     'cashier_username' => $cashierUsername,
-                    'timestamp' => $completedAt->format('Y-m-d H:i:s'),
                 ]);
                 DB::table('inventory_movements')->insert([
                     'product_id' => $product->id,
@@ -339,6 +337,7 @@ class BusinessController extends Controller
                 'tax_total' => $taxTotal,
                 'payment_method' => $paymentMethod,
             ]);
+            $completedAt = now()->utc();
 
             return [
                 'order_id' => $orderId,
