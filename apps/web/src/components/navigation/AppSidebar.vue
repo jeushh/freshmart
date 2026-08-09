@@ -51,10 +51,11 @@ async function showMobile() {
   nav.value?.focus()
 }
 
-function hideMobile(restoreFocus = false) {
+async function hideMobile(restoreFocus = false) {
   closeMobile()
   if (restoreFocus) {
-    nextTick(() => mobileTrigger.value?.focus())
+    await nextTick()
+    requestAnimationFrame(() => mobileTrigger.value?.focus())
   }
 }
 
