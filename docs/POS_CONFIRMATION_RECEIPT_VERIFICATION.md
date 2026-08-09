@@ -129,13 +129,16 @@ Expected at every width:
 1. Complete a successful sale and keep the checkout response successful.
 2. Before the automatic follow-up `GET /api/workspace/pos` completes, force that GET request to fail without changing the checkout response.
 3. Observe the completed receipt.
-4. Select **New sale** while the refresh failure remains unresolved, and force the automatic retry to fail once more.
-5. Restore the GET endpoint and select **Retry products**.
+4. Confirm the refresh warning and **Retry products** button remain visible on screen.
+5. Select **Print receipt** and inspect the printed output or print preview.
+6. Select **New sale** while the refresh failure remains unresolved, and force the automatic retry to fail once more.
+7. Restore the GET endpoint and select **Retry products**.
 
 Expected:
 
 - The completed receipt remains visible and unchanged after the failed GET.
 - A separate warning states that the sale succeeded but products could not be refreshed.
+- Printed output contains only the receipt: no refresh warning, **Retry products** button, page header/actions, sidebar, or navigation.
 - Selecting **New sale** does not erase the unresolved failure; it retries the product request.
 - If the retry still fails, the POS displays the error and all stale product buttons remain disabled.
 - After **Retry products** succeeds, the error clears and freshly loaded products become available.

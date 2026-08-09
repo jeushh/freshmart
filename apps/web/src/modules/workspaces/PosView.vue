@@ -704,7 +704,8 @@ onMounted(load)
     background: #fff;
   }
 
-  .receipt-screen-header {
+  .receipt-screen-header,
+  .receipt-refresh-error {
     display: none !important;
   }
 
