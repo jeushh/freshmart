@@ -179,7 +179,7 @@ onMounted(load)
 
 <template>
   <div v-if="completedSale" class="receipt-page">
-    <PageHeader title="Sale complete" description="The transaction was completed successfully.">
+    <PageHeader class="receipt-screen-header" title="Sale complete" description="The transaction was completed successfully.">
       <div class="receipt-actions">
         <UiButton variant="secondary" @click="printReceipt">Print receipt</UiButton>
         <UiButton @click="newSale">New sale</UiButton>
@@ -628,6 +628,69 @@ onMounted(load)
   .checkout-dialog__actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media print {
+  @page {
+    size: auto;
+    margin: 4mm;
+  }
+
+  :global(html),
+  :global(body) {
+    width: auto;
+    min-width: 0;
+    background: #fff;
+  }
+
+  .receipt-screen-header {
+    display: none !important;
+  }
+
+  .receipt-page {
+    width: 100%;
+    color: #000;
+    background: #fff;
+  }
+
+  .receipt {
+    width: 72mm;
+    max-width: 100%;
+    margin: 0 auto;
+    border: 0;
+    border-radius: 0;
+    color: #000;
+    background: #fff;
+    box-shadow: none;
+    font-size: 9pt;
+  }
+
+  .receipt *,
+  .receipt__status {
+    color: #000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .receipt__header,
+  .receipt__metadata,
+  .receipt__items,
+  .receipt__totals,
+  .receipt__footer {
+    padding: 3mm 0;
+    border-color: #000;
+    break-inside: avoid;
+  }
+
+  .receipt__header h2 {
+    font-size: 14pt;
+  }
+
+  .receipt__item,
+  .receipt__metadata > div,
+  .receipt__totals > div {
+    gap: 3mm;
   }
 }
 </style>
