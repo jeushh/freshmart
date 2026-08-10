@@ -149,6 +149,10 @@ class InventoryRoleWorkflowTest extends TestCase
         ])->assertOk();
 
         $this->actingAs($inventory);
+        $this->postJson("/api/purchase-orders/{$purchaseOrderId}/send")->assertOk();
+        $this->postJson("/api/purchase-orders/{$purchaseOrderId}/supplier-response", [
+            'response' => 'Accepted',
+        ])->assertOk();
         $this->postJson("/api/purchase-orders/{$purchaseOrderId}/receive", [
             'items' => [[
                 'purchase_order_item_id' => $purchaseOrderItemId,
