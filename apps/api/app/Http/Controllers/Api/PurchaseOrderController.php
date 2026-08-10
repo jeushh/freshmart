@@ -15,13 +15,14 @@ class PurchaseOrderController extends Controller
         $data = $request->validate([
             'approval_status' => 'sometimes|in:Draft,Submitted,Approved,Rejected,Cancelled',
             'status' => 'sometimes|in:Pending,Approved,Ordered,Partially Received,Fully Received,Cancelled',
+            'supplier_status' => 'sometimes|in:Not Sent,Sent,Accepted,Rejected',
             'supplier_id' => 'sometimes|integer|exists:suppliers,id',
             'search' => 'sometimes|string|max:120',
             'per_page' => 'sometimes|integer|min:1|max:100',
         ]);
         $query = $this->summaryQuery();
 
-        foreach (['approval_status', 'status', 'supplier_id'] as $filter) {
+        foreach (['approval_status', 'status', 'supplier_status', 'supplier_id'] as $filter) {
             if (isset($data[$filter])) {
                 $query->where("purchase_orders.{$filter}", $data[$filter]);
             }
@@ -142,6 +143,7 @@ class PurchaseOrderController extends Controller
                 'notes' => $data['notes'] ?? null,
                 'status' => 'Pending',
                 'approval_status' => 'Draft',
+                'supplier_status' => 'Not Sent',
                 'created_by' => $request->user()->username,
             ]);
             $this->replaceItems($orderId, $data['items'], $products);
@@ -267,12 +269,10 @@ class PurchaseOrderController extends Controller
                 'reviewed_at' => now()->format('Y-m-d H:i:s'),
                 'review_notes' => $data['notes'] ?? null,
             ]);
-            if ($order->restock_request_id) {
+            if ($order->restock_request_id && ! $approved) {
                 DB::table('restock_requests')
                     ->where('id', $order->restock_request_id)
-                    ->update($approved
-                        ? ['status' => 'Ordered']
-                        : ['status' => 'Approved', 'purchase_order_id' => null]);
+                    ->update(['status' => 'Approved', 'purchase_order_id' => null]);
             }
             AuditLogger::record(
                 $request,
@@ -284,6 +284,128 @@ class PurchaseOrderController extends Controller
                     'notes' => $data['notes'] ?? null,
                 ],
             );
+
+            return $this->show($purchaseOrder);
+        });
+    }
+
+    public function send(Request $request, int $purchaseOrder)
+    {
+        return DB::transaction(function () use ($request, $purchaseOrder) {
+            $order = DB::table('purchase_orders')
+                ->where('id', $purchaseOrder)
+                ->lockForUpdate()
+                ->first();
+            abort_unless($order, 404);
+            abort_unless(
+                $order->approval_status === 'Approved'
+                    && $order->status === 'Approved'
+                    && $order->supplier_status === 'Not Sent',
+                409,
+                "Purchase order cannot be sent to supplier from approval state {$order->approval_status} and supplier state {$order->supplier_status}.",
+            );
+            abort_if(
+                DB::table('stock_receivings')->where('purchase_order_id', $purchaseOrder)->exists(),
+                409,
+                'Purchase orders with receiving history cannot be sent.',
+            );
+
+            DB::table('purchase_orders')->where('id', $purchaseOrder)->update([
+                'supplier_status' => 'Sent',
+                'sent_to_supplier_at' => now()->format('Y-m-d H:i:s'),
+                'sent_by' => $request->user()->username,
+                'status' => 'Ordered',
+            ]);
+            if ($order->restock_request_id) {
+                DB::table('restock_requests')
+                    ->where('id', $order->restock_request_id)
+                    ->update(['status' => 'Ordered']);
+            }
+            AuditLogger::record(
+                $request,
+                'purchase_order.sent_to_supplier',
+                'purchase_order',
+                $purchaseOrder,
+                ['supplier_status' => 'Sent'],
+            );
+
+            return $this->show($purchaseOrder);
+        });
+    }
+
+    public function supplierResponse(Request $request, int $purchaseOrder)
+    {
+        $data = $request->validate([
+            'response' => 'required|in:Accepted,Rejected',
+            'supplier_reference' => 'nullable|string|max:100',
+            'expected_delivery_date' => 'nullable|date',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        return DB::transaction(function () use ($data, $request, $purchaseOrder) {
+            $order = DB::table('purchase_orders')
+                ->where('id', $purchaseOrder)
+                ->lockForUpdate()
+                ->first();
+            abort_unless($order, 404);
+            abort_unless(
+                $order->approval_status === 'Approved'
+                    && $order->status === 'Ordered'
+                    && $order->supplier_status === 'Sent',
+                409,
+                "Supplier response cannot be recorded for PO in supplier state {$order->supplier_status}.",
+            );
+
+            $isAccepted = $data['response'] === 'Accepted';
+            if (! $isAccepted) {
+                abort_if(
+                    DB::table('stock_receivings')->where('purchase_order_id', $purchaseOrder)->exists(),
+                    409,
+                    'Purchase orders with receiving history cannot be rejected by supplier.',
+                );
+            }
+
+            $update = [
+                'supplier_status' => $data['response'],
+                'supplier_responded_at' => now()->format('Y-m-d H:i:s'),
+                'supplier_reference' => $data['supplier_reference'] ?? null,
+                'supplier_response_notes' => $data['notes'] ?? null,
+            ];
+            if (! empty($data['expected_delivery_date'])) {
+                $update['expected_delivery_date'] = $data['expected_delivery_date'];
+            }
+
+            if ($isAccepted) {
+                DB::table('purchase_orders')->where('id', $purchaseOrder)->update($update);
+                AuditLogger::record(
+                    $request,
+                    'purchase_order.supplier_accepted',
+                    'purchase_order',
+                    $purchaseOrder,
+                    [
+                        'supplier_status' => 'Accepted',
+                        'supplier_reference' => $data['supplier_reference'] ?? null,
+                    ],
+                );
+            } else {
+                $update['status'] = 'Cancelled';
+                DB::table('purchase_orders')->where('id', $purchaseOrder)->update($update);
+                if ($order->restock_request_id) {
+                    DB::table('restock_requests')
+                        ->where('id', $order->restock_request_id)
+                        ->update(['status' => 'Approved', 'purchase_order_id' => null]);
+                }
+                AuditLogger::record(
+                    $request,
+                    'purchase_order.supplier_rejected',
+                    'purchase_order',
+                    $purchaseOrder,
+                    [
+                        'supplier_status' => 'Rejected',
+                        'notes' => $data['notes'] ?? null,
+                    ],
+                );
+            }
 
             return $this->show($purchaseOrder);
         });

@@ -31,15 +31,24 @@ class StockReceivingController extends Controller
                 ->first();
             abort_unless($order, 404);
             abort_unless(
-                $order->approval_status === 'Approved'
-                    && in_array(
-                        $order->status,
-                        ['Approved', 'Ordered', 'Partially Received'],
-                        true,
-                    ),
+                $order->approval_status === 'Approved',
                 409,
-                'Only approved, outstanding purchase orders can be received.',
+                'Only approved purchase orders can be received.',
             );
+            if ($order->supplier_status === null) {
+                abort_unless(
+                    in_array($order->status, ['Approved', 'Ordered', 'Partially Received'], true),
+                    409,
+                    'Only outstanding legacy purchase orders can be received.',
+                );
+            } else {
+                abort_unless(
+                    $order->supplier_status === 'Accepted'
+                        && in_array($order->status, ['Ordered', 'Partially Received'], true),
+                    409,
+                    'Only supplier-accepted purchase orders can be received.',
+                );
+            }
 
             $prepared = [];
             foreach ($data['items'] as $item) {

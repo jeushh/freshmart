@@ -559,6 +559,11 @@ class ModernWorkflowsTest extends TestCase
         $this->postJson("/api/purchase-orders/{$purchaseOrderId}/review", [
             'decision' => 'Approved',
         ])->assertOk();
+        $this->actingAs(User::where('username', 'inventory')->firstOrFail());
+        $this->postJson("/api/purchase-orders/{$purchaseOrderId}/send")->assertOk();
+        $this->postJson("/api/purchase-orders/{$purchaseOrderId}/supplier-response", [
+            'response' => 'Accepted',
+        ])->assertOk();
 
         return [
             $purchaseOrderId,

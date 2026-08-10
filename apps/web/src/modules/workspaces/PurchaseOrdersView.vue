@@ -14,11 +14,19 @@ const suppliers = ref([])
 const products = ref([])
 const restockRequests = ref([])
 const selected = ref(null)
-const filters = ref({ approval_status: '', status: '', supplier_id: '', search: '' })
+const filters = ref({ approval_status: '', status: '', supplier_status: '', supplier_id: '', search: '' })
 const actionNotes = ref('')
 const receiving = ref({})
 const error = ref('')
 const message = ref('')
+const responseForm = ref({
+  open: false,
+  response: 'Accepted',
+  supplier_reference: '',
+  expected_delivery_date: '',
+  notes: ''
+})
+
 const blankLine = () => ({ product_id: '', quantity: 1, unit_cost: 0 })
 const blankForm = () => ({
   id: null,
@@ -59,6 +67,44 @@ const canCancelSelected = computed(() => {
   return ['Draft', 'Submitted'].includes(state)
     && sessionStore.can('procurement.purchase_orders.manage')
 })
+
+const canMarkSent = computed(() => {
+  if (!selected.value) return false
+  const order = selected.value.order
+  return sessionStore.can('procurement.purchase_orders.manage')
+    && order.approval_status === 'Approved'
+    && order.status === 'Approved'
+    && order.supplier_status === 'Not Sent'
+})
+
+const canRecordResponse = computed(() => {
+  if (!selected.value) return false
+  const order = selected.value.order
+  return sessionStore.can('procurement.purchase_orders.manage')
+    && order.approval_status === 'Approved'
+    && order.status === 'Ordered'
+    && order.supplier_status === 'Sent'
+})
+
+const canReceiveOrder = computed(() => {
+  if (!selected.value) return false
+  if (!sessionStore.can('procurement.stock.receive')) return false
+  const order = selected.value.order
+  if (order.approval_status !== 'Approved') return false
+  if (order.supplier_status === null) {
+    return ['Approved', 'Ordered', 'Partially Received'].includes(order.status)
+  }
+  return order.supplier_status === 'Accepted' && ['Ordered', 'Partially Received'].includes(order.status)
+})
+
+function supplierStatusText(status) {
+  if (status === null || status === undefined) return 'Historical — not tracked'
+  if (status === 'Not Sent') return 'Not Sent'
+  if (status === 'Sent') return 'Sent to Supplier'
+  if (status === 'Accepted') return 'Supplier Accepted'
+  if (status === 'Rejected') return 'Supplier Rejected'
+  return status
+}
 
 async function load(refreshSelected = false) {
   try {
@@ -125,6 +171,7 @@ async function save() {
 async function open(id) {
   try {
     error.value = ''
+    responseForm.value.open = false
     selected.value = await api.get(`/purchase-orders/${id}`)
     receiving.value = Object.fromEntries(selected.value.items.map(item => [
       item.id,
@@ -161,6 +208,41 @@ async function transition(action, payload = {}) {
     selected.value = data
     message.value = `Purchase order ${action} completed.`
     actionNotes.value = ''
+    await load()
+  } catch (requestError) {
+    error.value = requestError.message
+  }
+}
+
+async function markSent() {
+  await transition('send')
+}
+
+function openResponseModal() {
+  responseForm.value = {
+    open: true,
+    response: 'Accepted',
+    supplier_reference: '',
+    expected_delivery_date: selected.value?.order?.expected_delivery_date || '',
+    notes: ''
+  }
+}
+
+async function submitResponse() {
+  try {
+    error.value = ''
+    message.value = ''
+    const id = selected.value.order.id
+    const payload = {
+      response: responseForm.value.response,
+      supplier_reference: responseForm.value.supplier_reference || null,
+      expected_delivery_date: responseForm.value.expected_delivery_date || null,
+      notes: responseForm.value.notes || null
+    }
+    const data = await api.post(`/purchase-orders/${id}/supplier-response`, payload)
+    selected.value = data
+    message.value = `Supplier response (${responseForm.value.response}) recorded.`
+    responseForm.value.open = false
     await load()
   } catch (requestError) {
     error.value = requestError.message
@@ -263,6 +345,13 @@ watch(receivingMode, isReceiving => {
       <option value="">All approval states</option>
       <option>Draft</option><option>Submitted</option><option>Approved</option><option>Rejected</option><option>Cancelled</option>
     </select>
+    <select v-model="filters.supplier_status">
+      <option value="">All supplier statuses</option>
+      <option value="Not Sent">Not Sent</option>
+      <option value="Sent">Sent</option>
+      <option value="Accepted">Accepted</option>
+      <option value="Rejected">Rejected</option>
+    </select>
     <select v-model="filters.status">
       <option value="">All receiving states</option>
       <option>Pending</option><option>Approved</option><option>Ordered</option>
@@ -277,6 +366,7 @@ watch(receivingMode, isReceiving => {
       { key: 'supplier_name', label: 'Supplier' },
       { key: 'total_amount', label: 'Total' },
       { key: 'approval_status', label: 'Approval' },
+      { key: 'supplier_status', label: 'Supplier status' },
       { key: 'status', label: 'Receiving' },
       { key: 'total_fulfilled', label: 'Fulfillment' },
       { key: 'expected_delivery_date', label: 'Expected' }
@@ -285,6 +375,7 @@ watch(receivingMode, isReceiving => {
   >
     <template #cell-total_amount="{ row }">{{ formatMoney(row.total_amount) }}</template>
     <template #cell-approval_status="{ row }"><span class="status-badge">{{ row.approval_status }}</span></template>
+    <template #cell-supplier_status="{ row }"><span class="status-badge">{{ supplierStatusText(row.supplier_status) }}</span></template>
     <template #cell-status="{ row }"><span class="status-badge">{{ row.status }}</span></template>
     <template #cell-total_fulfilled="{ row }">{{ row.total_fulfilled }} / {{ row.total_ordered }}</template>
     <template #actions="{ row }"><button @click="open(row.id)">Details</button></template>
@@ -295,6 +386,15 @@ watch(receivingMode, isReceiving => {
       <div>
         <h2>{{ selected.order.po_number }}</h2>
         <p>{{ selected.order.supplier_name }} · Server total {{ formatMoney(selected.order.total_amount) }}</p>
+        <p class="field-help">
+          Supplier state: <strong>{{ supplierStatusText(selected.order.supplier_status) }}</strong>
+          <span v-if="selected.order.sent_by"> · Sent by {{ selected.order.sent_by }} at {{ selected.order.sent_to_supplier_at }}</span>
+          <span v-if="selected.order.supplier_responded_at"> · Responded at {{ selected.order.supplier_responded_at }}</span>
+          <span v-if="selected.order.supplier_reference"> · Ref #{{ selected.order.supplier_reference }}</span>
+        </p>
+        <p v-if="selected.order.supplier_response_notes" class="field-help">
+          Response notes: {{ selected.order.supplier_response_notes }}
+        </p>
       </div>
       <div class="form-actions">
         <button
@@ -314,12 +414,49 @@ watch(receivingMode, isReceiving => {
           @click="transition('review', { decision: 'Rejected', notes: actionNotes || null })"
         >Reject</button>
         <button
+          v-if="canMarkSent"
+          @click="markSent"
+        >Mark Sent to Supplier</button>
+        <button
+          v-if="canRecordResponse"
+          @click="openResponseModal"
+        >Record Supplier Response</button>
+        <button
           v-if="canCancelSelected"
           @click="transition('cancel', { notes: actionNotes || null })"
         >Cancel</button>
       </div>
     </div>
     <label class="review-notes">Action notes<input v-model.trim="actionNotes" maxlength="500"></label>
+
+    <div v-if="responseForm.open" class="management-form modal-box">
+      <h3>Record Supplier Response</h3>
+      <div class="form-grid">
+        <label>
+          Decision
+          <select v-model="responseForm.response" required>
+            <option value="Accepted">Accepted</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </label>
+        <label>
+          Supplier Reference #
+          <input v-model.trim="responseForm.supplier_reference" placeholder="e.g. SO-98765" maxlength="100">
+        </label>
+        <label>
+          Expected Delivery Date
+          <input v-model="responseForm.expected_delivery_date" type="date">
+        </label>
+        <label class="full-field">
+          Response Notes
+          <textarea v-model.trim="responseForm.notes" rows="2" maxlength="1000" placeholder="Vendor communication notes..."></textarea>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="primary-button" type="button" @click="submitResponse">Save response</button>
+        <button class="secondary-button" type="button" @click="responseForm.open = false">Cancel</button>
+      </div>
+    </div>
 
     <WorkspaceTable
       :columns="[
@@ -339,7 +476,7 @@ watch(receivingMode, isReceiving => {
     </WorkspaceTable>
 
     <form
-      v-if="sessionStore.can('procurement.stock.receive') && selected.order.approval_status === 'Approved' && ['Approved', 'Ordered', 'Partially Received'].includes(selected.order.status)"
+      v-if="canReceiveOrder"
       class="receiving-form"
       @submit.prevent="receiveStock"
     >

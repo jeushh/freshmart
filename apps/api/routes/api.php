@@ -53,6 +53,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/purchase-orders', [PurchaseOrderController::class, 'store'])->middleware('permission:procurement.purchase_orders.manage');
     Route::put('/purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'update'])->middleware('permission:procurement.purchase_orders.manage');
     Route::post('/purchase-orders/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit'])->middleware('permission:procurement.purchase_orders.manage');
+    Route::post('/purchase-orders/{purchaseOrder}/send', [PurchaseOrderController::class, 'send'])->middleware('permission:procurement.purchase_orders.manage');
+    Route::post('/purchase-orders/{purchaseOrder}/supplier-response', [PurchaseOrderController::class, 'supplierResponse'])->middleware('permission:procurement.purchase_orders.manage');
     Route::post('/purchase-orders/{purchaseOrder}/review', [PurchaseOrderController::class, 'review'])->middleware('permission:procurement.purchase_orders.approve');
     Route::post('/purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel'])
         ->middleware('permission:procurement.purchase_orders.manage|procurement.purchase_orders.approve');
