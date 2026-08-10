@@ -259,18 +259,25 @@ class BusinessController extends Controller
 
         return DB::transaction(function () use ($data, $request, $settings) {
             $orderId = 'FM-'.now()->format('YmdHis').'-'.random_int(100, 999);
+            $cashierUsername = $request->user()->username;
+            $paymentMethod = $data['payment_method'];
+            $subtotalCents = 0;
             $totalCents = 0;
             $taxCents = 0;
+            $receiptItems = [];
 
             foreach ($data['items'] as $item) {
                 $product = DB::table('products')->where('id', $item['product_id'])->lockForUpdate()->first();
                 abort_if($product->status !== 'Active', 422, "{$product->name} is not available for sale.");
                 abort_if($product->stock_quantity < $item['quantity'], 422, "Insufficient stock for {$product->name}.");
 
+                $productPrice = (float) $product->price;
+                $unitPrice = round($productPrice, 2);
                 $tax = $settings->calculateTax(
-                    (float) $product->price * $item['quantity'],
+                    $productPrice * $item['quantity'],
                 );
                 $lineTotal = $tax['total'];
+                $subtotalCents += (int) round($tax['subtotal'] * 100);
                 $totalCents += (int) round($lineTotal * 100);
                 $taxCents += (int) round($tax['tax'] * 100);
                 $newStock = $product->stock_quantity - $item['quantity'];
@@ -280,15 +287,15 @@ class BusinessController extends Controller
                     'order_id' => $orderId,
                     'item_sku' => $product->sku,
                     'quantity_sold' => $item['quantity'],
-                    'unit_price' => round((float) $product->price, 2),
+                    'unit_price' => $unitPrice,
                     'subtotal_amount' => $tax['subtotal'],
                     'total_price' => $lineTotal,
                     'tax_rate' => $tax['rate'],
                     'tax_amount' => $tax['tax'],
                     'tax_inclusive' => $tax['inclusive'] ? 1 : 0,
                     'discount_amount' => 0,
-                    'payment_method' => $data['payment_method'],
-                    'cashier_username' => $request->user()->username,
+                    'payment_method' => $paymentMethod,
+                    'cashier_username' => $cashierUsername,
                 ]);
                 DB::table('inventory_movements')->insert([
                     'product_id' => $product->id,
@@ -298,10 +305,21 @@ class BusinessController extends Controller
                     'previous_stock' => $product->stock_quantity,
                     'new_stock' => $newStock,
                     'reference_id' => $orderId,
-                    'performed_by' => $request->user()->username,
+                    'performed_by' => $cashierUsername,
                 ]);
+                $receiptItems[] = [
+                    'product_id' => (int) $product->id,
+                    'sku' => $product->sku,
+                    'name' => $product->name,
+                    'quantity' => (int) $item['quantity'],
+                    'unit_price' => $unitPrice,
+                    'subtotal' => $tax['subtotal'],
+                    'tax_amount' => $tax['tax'],
+                    'total' => $lineTotal,
+                ];
             }
 
+            $subtotal = $subtotalCents / 100;
             $total = $totalCents / 100;
             $taxTotal = $taxCents / 100;
             DB::table('financial_transactions')->insert([
@@ -311,14 +329,15 @@ class BusinessController extends Controller
                 'reference_type' => 'sale',
                 'reference_id' => $orderId,
                 'description' => 'POS sale',
-                'payment_method' => $data['payment_method'],
-                'created_by' => $request->user()->username,
+                'payment_method' => $paymentMethod,
+                'created_by' => $cashierUsername,
             ]);
             AuditLogger::record($request, 'sale.completed', 'sale', $orderId, [
                 'total' => $total,
                 'tax_total' => $taxTotal,
-                'payment_method' => $data['payment_method'],
+                'payment_method' => $paymentMethod,
             ]);
+            $completedAt = now()->utc();
 
             return [
                 'order_id' => $orderId,
@@ -326,6 +345,11 @@ class BusinessController extends Controller
                 'tax_total' => $taxTotal,
                 'tax_rate' => $settings->all()['tax_rate'],
                 'tax_inclusive' => $settings->all()['tax_inclusive'],
+                'completed_at' => $completedAt->toIso8601String(),
+                'cashier_username' => $cashierUsername,
+                'payment_method' => $paymentMethod,
+                'subtotal' => $subtotal,
+                'items' => $receiptItems,
             ];
         });
     }
