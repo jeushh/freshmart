@@ -396,7 +396,7 @@ class AccountsPayableReadModelTest extends TestCase
         )->assertOk();
     }
 
-    public function test_accounts_payable_routes_are_read_only_in_pr_2a(): void
+    public function test_accounts_payable_routes_only_add_append_only_payment_operations(): void
     {
         $routes = collect(
             app('router')->getRoutes()->getRoutes()
@@ -407,14 +407,29 @@ class AccountsPayableReadModelTest extends TestCase
             )
         );
 
-        $this->assertCount(2, $routes);
+        $this->assertCount(4, $routes);
+
+        $payableRoutes = $routes->filter(fn ($route) => in_array($route->uri(), [
+            'api/accounts-payable',
+            'api/accounts-payable/{id}',
+        ], true));
+        $this->assertCount(2, $payableRoutes);
+        foreach ($payableRoutes as $route) {
+            $this->assertSame(['GET', 'HEAD'], $route->methods());
+        }
+
+        $paymentRoutes = $routes->filter(
+            fn ($route) => $route->uri() === 'api/accounts-payable/{accountsPayable}/payments'
+        );
+        $this->assertCount(2, $paymentRoutes);
+        $this->assertEqualsCanonicalizing(
+            ['GET', 'HEAD', 'POST'],
+            $paymentRoutes->flatMap(fn ($route) => $route->methods())->unique()->values()->all(),
+        );
 
         foreach ($routes as $route) {
             $methods = $route->methods();
 
-            $this->assertFalse(
-                in_array('POST', $methods, true)
-            );
             $this->assertFalse(
                 in_array('PUT', $methods, true)
             );

@@ -348,6 +348,102 @@ class AnalyticsProductionReadinessTest extends TestCase
         );
     }
 
+    public function test_supplier_settlement_is_separate_from_expenses_in_reports_and_dashboard(): void
+    {
+        $supplier = DB::table('suppliers')->first();
+        $payableId = DB::table('accounts_payable')->insertGetId([
+            'supplier_id' => $supplier->id,
+            'purchase_order_id' => null,
+            'supplier_invoice_id' => null,
+            'invoice_number' => 'REPORT-PAYMENT-001',
+            'total_amount' => 200,
+            'amount_paid' => 0,
+            'due_date' => now()->addWeek()->toDateString(),
+            'status' => 'Unpaid',
+        ]);
+        DB::table('financial_transactions')->insert([
+            'transaction_type' => 'Purchase',
+            'amount' => 200,
+            'direction' => 'Out',
+            'reference_type' => 'test_purchase',
+            'reference_id' => (string) $payableId,
+            'description' => 'Recognized procurement cost',
+            'category' => 'Inventory Purchase',
+            'created_by' => 'test',
+        ]);
+
+        $this->actingAs(User::where('username', 'finance')->firstOrFail());
+        $beforeReport = $this->getJson('/api/reports/finance')->assertOk()->json();
+        $beforeDashboard = $this->getJson('/api/dashboard')->assertOk()->json();
+
+        $this->postJson("/api/accounts-payable/{$payableId}/payments", [
+            'amount' => 75,
+            'payment_method' => 'Bank Transfer',
+            'reference_number' => 'REPORT-REF-001',
+            'payment_date' => now()->toDateString(),
+            'notes' => 'Reporting separation test',
+            'idempotency_key' => 'report-separation-payment',
+        ])->assertCreated();
+
+        $afterReport = $this->getJson('/api/reports/finance')->assertOk()->json();
+        $afterDashboard = $this->getJson('/api/dashboard')->assertOk()->json();
+
+        $this->assertSame(
+            (float) $beforeReport['summary']['expenses'],
+            (float) $afterReport['summary']['expenses'],
+        );
+        $this->assertSame(
+            (float) $beforeReport['summary']['net_movement'],
+            (float) $afterReport['summary']['net_movement'],
+        );
+        $this->assertSame(75.0, (float) $afterReport['summary']['supplier_payments']);
+        $this->assertSame(
+            (float) $beforeReport['summary']['accounts_payable'] - 75,
+            (float) $afterReport['summary']['accounts_payable'],
+        );
+        $paymentRecord = collect($afterReport['records']['data'])
+            ->firstWhere('transaction_type', 'Supplier Payment');
+        $this->assertNotNull($paymentRecord);
+        $this->assertSame(75.0, (float) $paymentRecord['amount']);
+        $this->assertStringContainsString(
+            'prevent double-counting',
+            implode(' ', $afterReport['notes']),
+        );
+
+        $beforeMetrics = collect($beforeDashboard['metrics'])->keyBy('key');
+        $afterMetrics = collect($afterDashboard['metrics'])->keyBy('key');
+        $this->assertSame(
+            (float) $beforeMetrics['month_expenses']['value'],
+            (float) $afterMetrics['month_expenses']['value'],
+        );
+        $this->assertSame(
+            (float) $beforeMetrics['net_movement']['value'],
+            (float) $afterMetrics['net_movement']['value'],
+        );
+        $this->assertSame(
+            (float) $beforeMetrics['month_supplier_payments']['value'] + 75,
+            (float) $afterMetrics['month_supplier_payments']['value'],
+        );
+        $this->assertSame(
+            (float) $beforeMetrics['accounts_payable']['value'] - 75,
+            (float) $afterMetrics['accounts_payable']['value'],
+        );
+        $this->assertNotNull(collect($afterDashboard['sections']['recent_financial_transactions'])
+            ->firstWhere('transaction_type', 'Supplier Payment'));
+
+        $viewer = $this->userWithPermissions('finance-report-viewer', ['reports.finance.view']);
+        $this->actingAs($viewer);
+        $this->getJson('/api/reports/finance')->assertOk();
+        $this->getJson('/api/dashboard')->assertOk()
+            ->assertJsonPath('metrics.0.key', 'today_revenue');
+        $this->postJson("/api/accounts-payable/{$payableId}/payments", [
+            'amount' => 1,
+            'payment_method' => 'Cash',
+            'payment_date' => now()->toDateString(),
+            'idempotency_key' => 'report-viewer-forbidden',
+        ])->assertForbidden();
+    }
+
     public function test_invalid_filters_return_standard_errors_with_correlation_id(): void
     {
         $this->actingAs(User::where('username', 'admin')->firstOrFail());

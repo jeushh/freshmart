@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\RestockRequestController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\StockReceivingController;
 use App\Http\Controllers\Api\SupplierInvoiceController;
+use App\Http\Controllers\Api\SupplierPaymentController;
 use App\Http\Controllers\Api\SystemSettingController;
 use Illuminate\Support\Facades\Route;
 
@@ -122,5 +123,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/accounts-payable', [AccountsPayableController::class, 'index']);
         Route::get('/accounts-payable/{id}', [AccountsPayableController::class, 'show']);
+        Route::get('/supplier-payments', [SupplierPaymentController::class, 'index']);
+        Route::get('/supplier-payments/{id}', [SupplierPaymentController::class, 'show']);
+        Route::get('/accounts-payable/{accountsPayable}/payments', [SupplierPaymentController::class, 'forPayable']);
+        Route::post('/accounts-payable/{accountsPayable}/payments', [SupplierPaymentController::class, 'store']);
     });
 });

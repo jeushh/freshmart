@@ -14,7 +14,7 @@ scripts, and legacy query inventory.
 | HR and payroll | `attendance_logs`, `hr_requests`, `payroll` |
 | Sales and inventory | `sales_ledger`, `refunds`, `inventory_movements`, `cash_drawers` |
 | Procurement | `restock_requests`, `purchase_orders`, `purchase_order_items`, `stock_receivings`, `stock_receiving_items`, `supplier_invoices`, `supplier_invoice_items`, `accounts_payable` |
-| Finance | `finance_requests`, `expenses`, `financial_transactions` |
+| Finance | `finance_requests`, `expenses`, `financial_transactions`, `supplier_payments` |
 | Operations | `audit_logs`, `system_settings` |
 
 Every one of the 23 application tables in the legacy database has a baseline
@@ -54,6 +54,38 @@ Accounts payable has two mutually exclusive creation paths:
 Legacy purchase orders cannot enter the structured supplier-invoice workflow,
 and existing historical payable records are not backfilled with fabricated
 supplier invoices.
+
+## Supplier payment settlement
+
+PR 2B adds `supplier_payments` as an append-only settlement ledger. Each row
+targets one `accounts_payable` record through the required
+`accounts_payable_id` foreign key. The nullable supplier, purchase-order, and
+supplier-invoice relationships are copied from the payable by the server; they
+are never accepted as client-authoritative values. This supports both legacy
+payables, where `supplier_invoice_id` remains `NULL`, and structured payables,
+where the linked supplier invoice remains terminally `Approved`.
+
+Payments may be partial and multiple payments may settle one payable. Monetary
+decisions convert the payable total, prior paid amount, and submitted payment
+to integer centavos. This prevents fractional residual balances and makes an
+exact final payment transition the payable to `Paid`; an incomplete settlement
+uses `Partially Paid`. Payments above the server-calculated outstanding balance
+are rejected before any settlement write.
+
+Every create request carries an `idempotency_key`. A database `UNIQUE`
+constraint is the final concurrency authority: an exact replay returns the
+existing payment without changing the payable or duplicating finance and audit
+records, while reuse for different logical payment data is rejected.
+
+Each new payment and the corresponding `accounts_payable.amount_paid` and
+status update, `Supplier Payment` / `Out` financial transaction, and audit row
+are written in one database transaction after locking the payable. Supplier
+payments represent liability settlement, so reporting displays them in a
+separate `supplier_payments` summary and excludes them from existing expense
+and net-movement calculations. Settlement does not change inventory,
+receiving, purchase-order, or supplier-invoice data. All supplier-payment
+creation and history endpoints require `finance.manage`; no edit, deletion,
+void, reversal, or refund operation is provided.
 
 ## Laravel support tables
 

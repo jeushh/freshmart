@@ -495,7 +495,7 @@ class ReportService
             ->selectRaw(
                 'id as source_id, created_at as record_date, '
                 ."'Transaction' as record_type, "
-                .'COALESCE(category, transaction_type) as category, direction, '
+                .'COALESCE(category, transaction_type) as category, transaction_type, direction, '
                 ."'Posted' as status, amount, NULL as due_date, 0 as age_days, "
                 .'COALESCE(description, transaction_type) as description',
             );
@@ -503,7 +503,7 @@ class ReportService
             ->leftJoin('suppliers', 'accounts_payable.supplier_id', '=', 'suppliers.id')
             ->selectRaw(
                 'accounts_payable.id as source_id, accounts_payable.created_at as record_date, '
-                ."'Accounts Payable' as record_type, 'Accounts Payable' as category, "
+                ."'Accounts Payable' as record_type, 'Accounts Payable' as category, NULL as transaction_type, "
                 ."'Out' as direction, accounts_payable.status, "
                 .'ROUND(accounts_payable.total_amount - accounts_payable.amount_paid, 2) as amount, '
                 .'accounts_payable.due_date, '
@@ -658,7 +658,10 @@ class ReportService
                 "ROUND(COALESCE(SUM(CASE WHEN record_type = 'Transaction' "
                 ."AND direction = 'In' THEN amount ELSE 0 END), 0), 2) as revenue, "
                 ."ROUND(COALESCE(SUM(CASE WHEN record_type = 'Transaction' "
-                ."AND direction = 'Out' THEN amount ELSE 0 END), 0), 2) as expenses, "
+                ."AND direction = 'Out' AND transaction_type != 'Supplier Payment' "
+                .'THEN amount ELSE 0 END), 0), 2) as expenses, '
+                ."ROUND(COALESCE(SUM(CASE WHEN transaction_type = 'Supplier Payment' "
+                ."AND direction = 'Out' THEN amount ELSE 0 END), 0), 2) as supplier_payments, "
                 ."ROUND(COALESCE(SUM(CASE WHEN record_type = 'Accounts Payable' "
                 .'THEN amount ELSE 0 END), 0), 2) as accounts_payable',
             )
@@ -670,6 +673,7 @@ class ReportService
             'revenue' => $revenue,
             'expenses' => $expenses,
             'net_movement' => round($revenue - $expenses, 2),
+            'supplier_payments' => (float) $row->supplier_payments,
             'accounts_payable' => (float) $row->accounts_payable,
             'accounts_receivable' => 0,
             'accounts_receivable_supported' => false,
@@ -747,6 +751,7 @@ class ReportService
             ],
             'finance' => [
                 'Accounts receivable is not modeled in the current schema and is reported as unavailable.',
+                'Supplier Payment entries settle Accounts Payable liabilities. They are displayed separately from expense recognition to prevent double-counting procurement costs already recorded through Purchase / Out.',
             ],
             default => [],
         };
