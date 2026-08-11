@@ -441,6 +441,14 @@ class PurchaseOrderController extends Controller
                 409,
                 'Purchase orders with receiving history cannot be cancelled.',
             );
+            abort_if(
+                DB::table('supplier_invoices')
+                    ->where('purchase_order_id', $purchaseOrder)
+                    ->whereIn('status', ['Draft', 'Registered', 'Disputed', 'Approved'])
+                    ->exists(),
+                409,
+                'Purchase orders with active supplier invoices cannot be cancelled.',
+            );
 
             DB::table('purchase_orders')->where('id', $purchaseOrder)->update([
                 'approval_status' => 'Cancelled',

@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\Api\AccountsPayableController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BusinessController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\FinancePurchaseOrderLookupController;
 use App\Http\Controllers\Api\HrRequestController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\PurchaseOrderController;
@@ -13,6 +15,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RestockRequestController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\StockReceivingController;
+use App\Http\Controllers\Api\SupplierInvoiceController;
 use App\Http\Controllers\Api\SystemSettingController;
 use Illuminate\Support\Facades\Route;
 
@@ -101,4 +104,23 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/workspace/self', [BusinessController::class, 'self'])->middleware('permission:employee.self');
     Route::post('/workspace/self/request', [BusinessController::class, 'submitSelf'])->middleware('permission:employee.self');
+
+    // Finance AP / Supplier Invoice routes (finance.manage only)
+    Route::middleware('permission:finance.manage')->group(function () {
+        Route::get('/finance/purchase-orders', [FinancePurchaseOrderLookupController::class, 'index']);
+        Route::get('/finance/purchase-orders/{purchaseOrder}', [FinancePurchaseOrderLookupController::class, 'show']);
+
+        Route::get('/supplier-invoices', [SupplierInvoiceController::class, 'index']);
+        Route::get('/supplier-invoices/{id}', [SupplierInvoiceController::class, 'show']);
+        Route::post('/purchase-orders/{purchaseOrder}/invoices', [SupplierInvoiceController::class, 'store']);
+        Route::put('/supplier-invoices/{id}', [SupplierInvoiceController::class, 'update']);
+        Route::post('/supplier-invoices/{id}/register', [SupplierInvoiceController::class, 'register']);
+        Route::post('/supplier-invoices/{id}/approve', [SupplierInvoiceController::class, 'approve']);
+        Route::post('/supplier-invoices/{id}/dispute', [SupplierInvoiceController::class, 'dispute']);
+        Route::post('/supplier-invoices/{id}/resolve-dispute', [SupplierInvoiceController::class, 'resolveDispute']);
+        Route::post('/supplier-invoices/{id}/void', [SupplierInvoiceController::class, 'void']);
+
+        Route::get('/accounts-payable', [AccountsPayableController::class, 'index']);
+        Route::get('/accounts-payable/{id}', [AccountsPayableController::class, 'show']);
+    });
 });

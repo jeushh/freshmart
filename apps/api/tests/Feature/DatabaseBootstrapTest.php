@@ -36,6 +36,8 @@ class DatabaseBootstrapTest extends TestCase
             'sales_ledger',
             'stock_receiving_items',
             'stock_receivings',
+            'supplier_invoice_items',
+            'supplier_invoices',
             'suppliers',
             'system_settings',
         ];
@@ -65,6 +67,10 @@ class DatabaseBootstrapTest extends TestCase
         $this->assertTrue(Schema::hasColumn('sales_ledger', 'tax_rate'));
         $this->assertTrue(Schema::hasColumn('sales_ledger', 'tax_amount'));
         $this->assertTrue(Schema::hasColumn('sales_ledger', 'discount_amount'));
+        $this->assertTrue(Schema::hasColumn('accounts_payable', 'supplier_invoice_id'));
+        $this->assertTrue(Schema::hasColumn('supplier_invoices', 'purchase_order_id'));
+        $this->assertTrue(Schema::hasColumn('supplier_invoices', 'supplier_id'));
+        $this->assertTrue(Schema::hasColumn('supplier_invoice_items', 'supplier_invoice_id'));
         $this->assertDatabaseHas('admin_users', [
             'username' => 'admin',
             'status' => 'Active',

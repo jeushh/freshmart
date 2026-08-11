@@ -16,6 +16,7 @@ class StockReceivingController extends Controller
             'invoice_number' => 'nullable|string|max:100',
             'due_date' => 'nullable|date',
             'items' => 'required|array|min:1|max:100',
+            // tracked POs must not supply invoice_number or due_date via receiving
             'items.*.purchase_order_item_id' => 'required|integer|distinct',
             'items.*.delivered_quantity' => 'required|integer|min:0|max:100000',
             'items.*.damaged_quantity' => 'sometimes|integer|min:0|max:100000',
@@ -35,6 +36,11 @@ class StockReceivingController extends Controller
                 409,
                 'Only approved purchase orders can be received.',
             );
+            if ($order->supplier_status !== null
+                && (isset($data['invoice_number']) || isset($data['due_date']))) {
+                abort(422, 'Tracked purchase orders do not accept invoice_number or due_date during receiving.');
+            }
+
             if ($order->supplier_status === null) {
                 abort_unless(
                     in_array($order->status, ['Approved', 'Ordered', 'Partially Received'], true),
@@ -194,31 +200,37 @@ class StockReceivingController extends Controller
                     'category' => 'Inventory Purchase',
                     'created_by' => $request->user()->username,
                 ]);
-                $payable = DB::table('accounts_payable')
-                    ->where('purchase_order_id', $purchaseOrder)
-                    ->lockForUpdate()
-                    ->first();
-                if ($payable) {
-                    $newTotal = round($payable->total_amount + $totalCost, 2);
-                    DB::table('accounts_payable')->where('id', $payable->id)->update([
-                        'total_amount' => $newTotal,
-                        'invoice_number' => $data['invoice_number'] ?? $payable->invoice_number,
-                        'due_date' => $data['due_date'] ?? $payable->due_date,
-                        'status' => $payable->amount_paid >= $newTotal
-                            ? 'Paid'
-                            : ($payable->amount_paid > 0 ? 'Partially Paid' : 'Unpaid'),
-                    ]);
-                } else {
-                    DB::table('accounts_payable')->insert([
-                        'supplier_id' => $order->supplier_id,
-                        'purchase_order_id' => $purchaseOrder,
-                        'invoice_number' => $data['invoice_number'] ?? null,
-                        'total_amount' => $totalCost,
-                        'amount_paid' => 0,
-                        'due_date' => $data['due_date'] ?? null,
-                        'status' => 'Unpaid',
-                    ]);
+
+                // Legacy AP path: supplier_status IS NULL only
+                if ($order->supplier_status === null) {
+                    $payable = DB::table('accounts_payable')
+                        ->where('purchase_order_id', $purchaseOrder)
+                        ->whereNull('supplier_invoice_id')
+                        ->lockForUpdate()
+                        ->first();
+                    if ($payable) {
+                        $newTotal = round($payable->total_amount + $totalCost, 2);
+                        DB::table('accounts_payable')->where('id', $payable->id)->update([
+                            'total_amount' => $newTotal,
+                            'invoice_number' => $data['invoice_number'] ?? $payable->invoice_number,
+                            'due_date' => $data['due_date'] ?? $payable->due_date,
+                            'status' => $payable->amount_paid >= $newTotal
+                                ? 'Paid'
+                                : ($payable->amount_paid > 0 ? 'Partially Paid' : 'Unpaid'),
+                        ]);
+                    } else {
+                        DB::table('accounts_payable')->insert([
+                            'supplier_id' => $order->supplier_id,
+                            'purchase_order_id' => $purchaseOrder,
+                            'invoice_number' => $data['invoice_number'] ?? null,
+                            'total_amount' => $totalCost,
+                            'amount_paid' => 0,
+                            'due_date' => $data['due_date'] ?? null,
+                            'status' => 'Unpaid',
+                        ]);
+                    }
                 }
+                // Tracked POs: no AP created/modified by receiving
             }
 
             AuditLogger::record(

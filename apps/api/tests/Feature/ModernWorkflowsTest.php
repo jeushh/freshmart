@@ -292,7 +292,6 @@ class ModernWorkflowsTest extends TestCase
         $this->actingAs(User::where('username', 'inventory')->firstOrFail());
 
         $first = $this->postJson("/api/purchase-orders/{$purchaseOrderId}/receive", [
-            'invoice_number' => 'INV-TEST-001',
             'items' => [[
                 'purchase_order_item_id' => $line->id,
                 'delivered_quantity' => 10,
@@ -327,12 +326,10 @@ class ModernWorkflowsTest extends TestCase
             'damaged_quantity' => 0,
             'rejected_quantity' => 3,
         ]);
-        $this->assertSame(
-            35.0,
-            (float) DB::table('accounts_payable')
-                ->where('purchase_order_id', $purchaseOrderId)
-                ->value('total_amount'),
-        );
+        // Tracked PO: receiving does NOT create AP
+        $this->assertDatabaseMissing('accounts_payable', [
+            'purchase_order_id' => $purchaseOrderId,
+        ]);
         $detail = $this->getJson("/api/purchase-orders/{$purchaseOrderId}")
             ->assertOk();
         $detail->assertJsonPath('items.0.fulfilled_quantity', 7)
@@ -424,12 +421,11 @@ class ModernWorkflowsTest extends TestCase
                 ->where('reference_id', DB::table('purchase_orders')->where('id', $purchaseOrderId)->value('po_number'))
                 ->sum('quantity'),
         );
-        $this->assertSame(
-            50.0,
-            (float) DB::table('accounts_payable')
-                ->where('purchase_order_id', $purchaseOrderId)
-                ->value('total_amount'),
-        );
+        // Tracked PO: receiving does NOT create AP (AP is created only by invoice approval)
+        $this->assertDatabaseMissing('accounts_payable', [
+            'purchase_order_id' => $purchaseOrderId,
+        ]);
+        // Purchase/Out financial_transactions ARE created for tracked POs
         $this->assertSame(
             50.0,
             (float) DB::table('financial_transactions')
