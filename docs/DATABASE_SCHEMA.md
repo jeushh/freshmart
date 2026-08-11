@@ -13,7 +13,7 @@ scripts, and legacy query inventory.
 | Catalog | `suppliers`, `products` |
 | HR and payroll | `attendance_logs`, `hr_requests`, `payroll` |
 | Sales and inventory | `sales_ledger`, `refunds`, `inventory_movements`, `cash_drawers` |
-| Procurement | `restock_requests`, `purchase_orders`, `purchase_order_items`, `stock_receivings`, `stock_receiving_items`, `accounts_payable` |
+| Procurement | `restock_requests`, `purchase_orders`, `purchase_order_items`, `stock_receivings`, `stock_receiving_items`, `supplier_invoices`, `supplier_invoice_items`, `accounts_payable` |
 | Finance | `finance_requests`, `expenses`, `financial_transactions` |
 | Operations | `audit_logs`, `system_settings` |
 
@@ -21,6 +21,39 @@ Every one of the 23 application tables in the legacy database has a baseline
 migration. The migrations retain the established column names, SQLite storage
 types, defaults, status values, unique keys, indexes, and relationships used by
 the application.
+
+## Supplier invoice and accounts payable workflow
+
+PR 2A adds structured supplier invoicing without rewriting historical payable
+data:
+
+- `supplier_invoices` stores one supplier invoice header associated with an
+  eligible tracked purchase order. The supplier is derived from the purchase
+  order rather than supplied independently by the client. Invoice states are
+  `Draft`, `Registered`, `Approved`, `Disputed`, and `Void`.
+- `supplier_invoice_items` stores the structured invoice lines. Every line
+  references an existing `purchase_order_item`; non-purchase-order invoice
+  lines are not supported. Invoiced quantity and unit cost are recorded per
+  line, while line totals are calculated by the server.
+- `accounts_payable.supplier_invoice_id` is a nullable foreign key to
+  `supplier_invoices`. It is unique when present so one approved structured
+  supplier invoice can produce at most one payable. Historical and legacy
+  payable rows retain `NULL` in this column.
+
+Accounts payable has two mutually exclusive creation paths:
+
+1. **Legacy purchase orders** have `supplier_status IS NULL`. Stock receiving
+   continues to create a `Purchase` / `Out` financial transaction and creates
+   or accumulates the legacy `accounts_payable` row. Its
+   `supplier_invoice_id` remains `NULL`.
+2. **Tracked purchase orders** have `supplier_status IS NOT NULL`. Stock
+   receiving still creates the existing `Purchase` / `Out` financial
+   transaction, but it does not create or update accounts payable. A payable is
+   created only when a structured supplier invoice reaches `Approved`.
+
+Legacy purchase orders cannot enter the structured supplier-invoice workflow,
+and existing historical payable records are not backfilled with fabricated
+supplier invoices.
 
 ## Laravel support tables
 
