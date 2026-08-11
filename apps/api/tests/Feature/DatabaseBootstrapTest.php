@@ -38,6 +38,7 @@ class DatabaseBootstrapTest extends TestCase
             'stock_receivings',
             'supplier_invoice_items',
             'supplier_invoices',
+            'supplier_payments',
             'suppliers',
             'system_settings',
         ];
@@ -71,6 +72,10 @@ class DatabaseBootstrapTest extends TestCase
         $this->assertTrue(Schema::hasColumn('supplier_invoices', 'purchase_order_id'));
         $this->assertTrue(Schema::hasColumn('supplier_invoices', 'supplier_id'));
         $this->assertTrue(Schema::hasColumn('supplier_invoice_items', 'supplier_invoice_id'));
+        $this->assertTrue(Schema::hasColumn('supplier_payments', 'accounts_payable_id'));
+        $this->assertTrue(Schema::hasColumn('supplier_payments', 'idempotency_key'));
+        $this->assertTrue(collect(DB::select("PRAGMA index_list('supplier_payments')"))
+            ->contains(fn ($index) => (int) $index->unique === 1));
         $this->assertDatabaseHas('admin_users', [
             'username' => 'admin',
             'status' => 'Active',

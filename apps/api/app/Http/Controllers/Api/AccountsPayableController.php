@@ -63,7 +63,9 @@ class AccountsPayableController extends Controller
 
     private function decorate(object $row): object
     {
-        $row->outstanding_balance = round((float) $row->total_amount - (float) $row->amount_paid, 2);
+        $totalCents = (int) round((float) $row->total_amount * 100, 0, PHP_ROUND_HALF_UP);
+        $paidCents = (int) round((float) $row->amount_paid * 100, 0, PHP_ROUND_HALF_UP);
+        $row->outstanding_balance = max(0, $totalCents - $paidCents) / 100;
         $row->source = $row->supplier_invoice_id !== null ? 'structured' : 'legacy';
         $row->overdue = $row->status !== 'Paid'
             && $row->due_date !== null

@@ -16,6 +16,27 @@ const error = ref('')
 const selectedPurchaseOrder = ref(null)
 const selectedInvoice = ref(null)
 const selectedInvoicePo = ref(null)
+const selectedPayable = ref(null)
+const paymentHistory = ref([])
+const paymentSubmitting = ref(false)
+const paymentAttemptKey = ref(null)
+
+function localDate() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+const paymentForm = ref({
+  amount: '',
+  payment_method: 'Bank Transfer',
+  reference_number: '',
+  payment_date: localDate(),
+  notes: '',
+})
 
 const invoiceFilters = ref({
   status: '',
@@ -366,6 +387,81 @@ async function transitionInvoice(id, action) {
     }
   } catch (requestError) {
     error.value = requestError.message
+  }
+}
+
+function newIdempotencyKey() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID()
+  }
+
+  return `supplier-payment-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function resetPaymentAttempt() {
+  paymentAttemptKey.value = null
+  paymentForm.value = {
+    amount: selectedPayable.value
+      ? Number(selectedPayable.value.outstanding_balance).toFixed(2)
+      : '',
+    payment_method: 'Bank Transfer',
+    reference_number: '',
+    payment_date: localDate(),
+    notes: '',
+  }
+}
+
+async function openPayable(id) {
+  try {
+    error.value = ''
+    const [payableData, historyData] = await Promise.all([
+      api.get(`/accounts-payable/${id}`),
+      api.get(`/accounts-payable/${id}/payments`),
+    ])
+    selectedPayable.value = payableData.payable
+    paymentHistory.value = historyData.payments
+    resetPaymentAttempt()
+  } catch (requestError) {
+    error.value = requestError.message
+  }
+}
+
+async function recordSupplierPayment() {
+  if (!selectedPayable.value || paymentSubmitting.value) {
+    return
+  }
+
+  paymentAttemptKey.value ||= newIdempotencyKey()
+  paymentSubmitting.value = true
+  error.value = ''
+
+  try {
+    const result = await api.post(
+      `/accounts-payable/${selectedPayable.value.id}/payments`,
+      {
+        amount: Number(paymentForm.value.amount),
+        payment_method: paymentForm.value.payment_method,
+        reference_number: paymentForm.value.reference_number.trim() || null,
+        payment_date: paymentForm.value.payment_date,
+        notes: paymentForm.value.notes.trim() || null,
+        idempotency_key: paymentAttemptKey.value,
+      },
+    )
+
+    selectedPayable.value = result.payable
+    const [historyData, overviewData] = await Promise.all([
+      api.get(`/accounts-payable/${selectedPayable.value.id}/payments`),
+      api.get('/workspace/finance/overview'),
+      loadSupplierFinance(),
+    ])
+    paymentHistory.value = historyData.payments
+    transactions.value = overviewData.transactions
+    resetPaymentAttempt()
+  } catch (requestError) {
+    // Preserve the key so a retry after a timeout or unknown response remains idempotent.
+    error.value = requestError.message
+  } finally {
+    paymentSubmitting.value = false
   }
 }
 
@@ -859,8 +955,8 @@ onMounted(load)
     <h2 class="section-title">Accounts payable</h2>
 
     <p>
-      Read-only in PR 2A. Supplier payment settlement is not available in this
-      workflow.
+      Record partial or full supplier settlements against the outstanding
+      Accounts Payable balance.
     </p>
 
     <WorkspaceTable
@@ -900,7 +996,135 @@ onMounted(load)
       <template #cell-status="{ row }">
         {{ row.status }}<span v-if="row.overdue"> — Overdue</span>
       </template>
+
+      <template #actions="{ row }">
+        <button @click="openPayable(row.id)">
+          {{ Number(row.outstanding_balance) > 0 ? 'Record payment' : 'View payments' }}
+        </button>
+      </template>
     </WorkspaceTable>
+
+    <section
+      v-if="selectedPayable"
+      class="detail-panel finance-subsection"
+    >
+      <h3>Supplier payment settlement</h3>
+
+      <p class="finance-summary">
+        <strong>Supplier:</strong>
+        {{ selectedPayable.supplier_name || 'Not assigned' }}
+        ·
+        <strong>PO:</strong>
+        {{ selectedPayable.po_number || 'Not assigned' }}
+        ·
+        <strong>Invoice:</strong>
+        {{ selectedPayable.invoice_number || 'Not assigned' }}
+        ·
+        <strong>Status:</strong>
+        {{ selectedPayable.status }}
+      </p>
+
+      <div class="payment-balances">
+        <span><strong>AP total:</strong> {{ formatMoney(selectedPayable.total_amount) }}</span>
+        <span><strong>Already paid:</strong> {{ formatMoney(selectedPayable.amount_paid) }}</span>
+        <span>
+          <strong>Outstanding:</strong>
+          {{ formatMoney(selectedPayable.outstanding_balance) }}
+        </span>
+      </div>
+
+      <form
+        v-if="Number(selectedPayable.outstanding_balance) > 0"
+        class="finance-subsection"
+        @submit.prevent="recordSupplierPayment"
+      >
+        <div class="form-grid">
+          <label>
+            Payment amount
+            <input
+              v-model="paymentForm.amount"
+              type="number"
+              min="0.01"
+              :max="selectedPayable.outstanding_balance"
+              step="0.01"
+              required
+            >
+          </label>
+
+          <label>
+            Payment method
+            <select v-model="paymentForm.payment_method" required>
+              <option>Bank Transfer</option>
+              <option>Check</option>
+              <option>Cash</option>
+              <option>Other</option>
+            </select>
+          </label>
+
+          <label>
+            Reference number
+            <input
+              v-model="paymentForm.reference_number"
+              maxlength="255"
+              placeholder="Optional reference"
+            >
+          </label>
+
+          <label>
+            Payment date
+            <input v-model="paymentForm.payment_date" type="date" required>
+          </label>
+
+          <label>
+            Notes
+            <input
+              v-model="paymentForm.notes"
+              maxlength="1000"
+              placeholder="Optional notes"
+            >
+          </label>
+        </div>
+
+        <div class="action-row">
+          <button
+            class="primary-button"
+            type="submit"
+            :disabled="paymentSubmitting || Number(paymentForm.amount) <= 0"
+          >
+            {{ paymentSubmitting ? 'Recording…' : 'Record supplier payment' }}
+          </button>
+
+          <button
+            type="button"
+            :disabled="paymentSubmitting"
+            @click="resetPaymentAttempt"
+          >
+            Reset payment attempt
+          </button>
+        </div>
+      </form>
+
+      <h3 class="finance-subsection">Payment history</h3>
+
+      <WorkspaceTable
+        :columns="[
+          { key: 'payment_date', label: 'Payment date' },
+          { key: 'amount', label: 'Amount' },
+          { key: 'payment_method', label: 'Method' },
+          { key: 'reference_number', label: 'Reference' },
+          { key: 'created_by', label: 'Created by' }
+        ]"
+        :rows="paymentHistory"
+      >
+        <template #cell-amount="{ row }">
+          {{ formatMoney(row.amount) }}
+        </template>
+
+        <template #cell-reference_number="{ row }">
+          {{ row.reference_number || '—' }}
+        </template>
+      </WorkspaceTable>
+    </section>
   </template>
 </template>
 
@@ -931,6 +1155,13 @@ onMounted(load)
 }
 
 .finance-summary {
+  margin: 1rem 0;
+}
+
+.payment-balances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
   margin: 1rem 0;
 }
 

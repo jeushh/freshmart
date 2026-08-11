@@ -204,7 +204,13 @@ class DashboardService
             $monthExpenses = $this->financialSum(
                 'Out',
                 $month->format('Y-m-d H:i:s'),
+                'Supplier Payment',
             );
+            $monthSupplierPayments = round((float) DB::table('financial_transactions')
+                ->where('transaction_type', 'Supplier Payment')
+                ->where('direction', 'Out')
+                ->where('created_at', '>=', $month->format('Y-m-d H:i:s'))
+                ->sum('amount'), 2);
             $payables = DB::table('accounts_payable')
                 ->whereIn('status', ['Unpaid', 'Partially Paid', 'Overdue'])
                 ->selectRaw(
@@ -215,6 +221,12 @@ class DashboardService
                 $this->metric('today_revenue', 'Today revenue', $todayRevenue, 'money'),
                 $this->metric('month_revenue', 'Month revenue', $monthRevenue, 'money'),
                 $this->metric('month_expenses', 'Month expenses', $monthExpenses, 'money'),
+                $this->metric(
+                    'month_supplier_payments',
+                    'Month supplier payments',
+                    $monthSupplierPayments,
+                    'money',
+                ),
                 $this->metric('net_movement', 'Net movement', round($monthRevenue - $monthExpenses, 2), 'money'),
                 $this->metric(
                     'accounts_payable',
@@ -433,11 +445,18 @@ class DashboardService
         ];
     }
 
-    private function financialSum(string $direction, string $from): float
-    {
+    private function financialSum(
+        string $direction,
+        string $from,
+        ?string $excludedTransactionType = null,
+    ): float {
         return round((float) DB::table('financial_transactions')
             ->where('direction', $direction)
             ->where('created_at', '>=', $from)
+            ->when(
+                $excludedTransactionType !== null,
+                fn ($query) => $query->where('transaction_type', '!=', $excludedTransactionType),
+            )
             ->sum('amount'), 2);
     }
 
