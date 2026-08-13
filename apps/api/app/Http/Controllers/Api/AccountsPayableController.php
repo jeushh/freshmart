@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\ProcurementCloseStatusService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -31,12 +32,16 @@ class AccountsPayableController extends Controller
         return ['payables' => $rows];
     }
 
-    public function show(int $id)
+    public function show(int $id, ProcurementCloseStatusService $closeStatus)
     {
         $row = $this->baseQuery()->where('accounts_payable.id', $id)->first();
         abort_unless($row, 404);
+        $payable = $this->decorate($row);
+        $payable->procurement_close_status = $closeStatus->forPurchaseOrder(
+            $payable->purchase_order_id === null ? null : (int) $payable->purchase_order_id,
+        );
 
-        return ['payable' => $this->decorate($row)];
+        return ['payable' => $payable];
     }
 
     private function baseQuery()
