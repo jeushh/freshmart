@@ -4,6 +4,7 @@ import { api } from '../../api/http.js'
 import { sessionStore } from '../../stores/session.js'
 import PageHeader from '../../components/common/PageHeader.vue'
 import WorkspaceTable from '../../components/common/WorkspaceTable.vue'
+import { UiStatusBadge } from '../../components/ui/index.js'
 import { formatMoney } from '../../utils/formatters.js'
 
 const requests = ref([])
@@ -411,6 +412,17 @@ function resetPaymentAttempt() {
   }
 }
 
+function procurementCloseTone(status) {
+  if (status === 'Complete') {
+    return 'success'
+  }
+  if (status === 'Open — Awaiting Delivery') {
+    return 'info'
+  }
+
+  return 'warning'
+}
+
 async function openPayable(id) {
   try {
     error.value = ''
@@ -436,7 +448,8 @@ async function recordSupplierPayment() {
   error.value = ''
 
   try {
-    const result = await api.post(
+    const payableId = selectedPayable.value.id
+    await api.post(
       `/accounts-payable/${selectedPayable.value.id}/payments`,
       {
         amount: Number(paymentForm.value.amount),
@@ -448,12 +461,13 @@ async function recordSupplierPayment() {
       },
     )
 
-    selectedPayable.value = result.payable
-    const [historyData, overviewData] = await Promise.all([
-      api.get(`/accounts-payable/${selectedPayable.value.id}/payments`),
+    const [payableData, historyData, overviewData] = await Promise.all([
+      api.get(`/accounts-payable/${payableId}`),
+      api.get(`/accounts-payable/${payableId}/payments`),
       api.get('/workspace/finance/overview'),
       loadSupplierFinance(),
     ])
+    selectedPayable.value = payableData.payable
     paymentHistory.value = historyData.payments
     transactions.value = overviewData.transactions
     resetPaymentAttempt()
@@ -1033,6 +1047,14 @@ onMounted(load)
         </span>
       </div>
 
+      <p class="procurement-close-status">
+        <strong>Procurement close-out:</strong>
+        <UiStatusBadge
+          :status="selectedPayable.procurement_close_status"
+          :tone="procurementCloseTone(selectedPayable.procurement_close_status)"
+        />
+      </p>
+
       <form
         v-if="Number(selectedPayable.outstanding_balance) > 0"
         class="finance-subsection"
@@ -1162,6 +1184,13 @@ onMounted(load)
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1.5rem;
+  margin: 1rem 0;
+}
+
+.procurement-close-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin: 1rem 0;
 }
 
