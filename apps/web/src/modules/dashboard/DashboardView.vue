@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../../api/http.js'
 import MetricChart from '../../components/common/MetricChart.vue'
-import UiEmptyState from '../../components/ui/UiEmptyState.vue'
 import UiErrorState from '../../components/ui/UiErrorState.vue'
 import UiKpiCard from '../../components/ui/UiKpiCard.vue'
 import UiLoadingSkeleton from '../../components/ui/UiLoadingSkeleton.vue'
@@ -15,6 +14,42 @@ import { formatDateTime, formatMoney, formatNumber } from '../../utils/formatter
 const dashboard = ref(null)
 const loading = ref(true)
 const error = ref('')
+
+const primaryMetricKeys = [
+  'active_users',
+  'today_sales',
+  'today_transactions',
+  'active_employees',
+  'month_sales',
+  'pending_hr_requests',
+  'outstanding_payroll',
+  'low_stock'
+]
+
+const salesFinanceMetricKeys = [
+  'today_revenue',
+  'month_revenue',
+  'month_expenses',
+  'month_refunds',
+  'net_movement',
+  'average_transaction',
+  'accounts_payable'
+]
+
+const inventoryPurchasingMetricKeys = [
+  'total_products',
+  'out_of_stock',
+  'pending_restock',
+  'ready_for_receiving',
+  'submitted_purchase_orders',
+  'partially_received_orders',
+  'fully_received_orders',
+  'approved_restock_requests'
+]
+
+const metricLabelOverrides = {
+  today_revenue: "Today's cash revenue"
+}
 
 const metricPermissions = {
   active_users: 'system.users.manage|system.roles.manage',
@@ -47,6 +82,8 @@ const metricPermissions = {
 const listSectionDefinitions = [
   {
     key: 'recent_sales',
+    column: 0,
+    order: 4,
     title: 'Recent sales',
     description: 'Latest finalized transactions available to your account.',
     permission: 'pos.access|sales.view|reports.sales.view',
@@ -63,6 +100,8 @@ const listSectionDefinitions = [
   },
   {
     key: 'recent_audit',
+    column: 1,
+    order: 5,
     title: 'Recent activity',
     description: 'Latest recorded administrative activity.',
     permission: 'system.audit.view',
@@ -77,6 +116,8 @@ const listSectionDefinitions = [
   },
   {
     key: 'recent_financial_transactions',
+    column: 0,
+    order: 6,
     title: 'Recent financial transactions',
     description: 'Latest authorized cash movements.',
     permission: 'finance.manage|reports.finance.view',
@@ -92,6 +133,8 @@ const listSectionDefinitions = [
   },
   {
     key: 'recent_inventory_movements',
+    column: 1,
+    order: 7,
     title: 'Recent inventory movements',
     description: 'Latest audited stock changes.',
     permission: 'inventory.manage|reports.inventory.view',
@@ -108,11 +151,14 @@ const listSectionDefinitions = [
   },
   {
     key: 'low_leave_balances',
+    column: 0,
+    order: 8,
     title: 'Low leave balances',
     description: 'Employees whose available leave balance is low.',
     permission: 'hr.employees.view|reports.hr.view',
     emptyTitle: 'No low leave balances',
     emptyDescription: 'No employees currently meet the low-balance threshold.',
+    compactEmptyText: 'No employees currently meet the low-balance threshold.',
     columns: [
       ['employee_no', 'Employee number'],
       ['full_name', 'Employee'],
@@ -121,58 +167,18 @@ const listSectionDefinitions = [
   },
   {
     key: 'supplier_activity',
+    column: 1,
+    order: 9,
     title: 'Supplier activity',
     description: 'Recent purchase-order activity grouped by supplier.',
     permission: 'restock.approve|procurement.purchase_orders.approve|reports.procurement.view',
     emptyTitle: 'No supplier activity',
     emptyDescription: 'No purchase-order activity is currently recorded.',
+    compactEmptyText: 'No recent supplier activity.',
     columns: [
       ['name', 'Supplier'],
       ['purchase_orders', 'Purchase orders', 'number'],
       ['latest_order', 'Latest order', 'date']
-    ]
-  }
-]
-
-const summarySectionDefinitions = [
-  {
-    key: 'attendance_today',
-    title: 'Attendance today',
-    description: 'Authorized attendance totals for the current business day.',
-    permission: 'hr.attendance.view|reports.hr.view',
-    fields: [
-      ['records', 'Records', 'number'],
-      ['present', 'Present', 'number'],
-      ['late', 'Late', 'number'],
-      ['absent', 'Absent', 'number']
-    ]
-  },
-  {
-    key: 'payroll_summary',
-    title: 'Payroll summary',
-    description: 'Latest payroll period and outstanding obligation.',
-    permission: 'payroll.manage|reports.payroll.view',
-    fields: [
-      ['period_start', 'Period start', 'date'],
-      ['period_end', 'Period end', 'date'],
-      ['period_records', 'Period records', 'number'],
-      ['period_net_pay', 'Period net pay', 'money'],
-      ['outstanding_records', 'Outstanding records', 'number'],
-      ['outstanding_obligation', 'Outstanding obligation', 'money']
-    ]
-  },
-  {
-    key: 'system_health',
-    title: 'System health',
-    description: 'Current application and database health signals.',
-    permission: 'system.settings.manage|system.backups.manage',
-    fields: [
-      ['environment', 'Environment'],
-      ['debug', 'Debug mode', 'boolean'],
-      ['database_integrity', 'Database integrity'],
-      ['foreign_key_violations', 'Foreign-key violations', 'number'],
-      ['cache_driver', 'Cache driver'],
-      ['queue_driver', 'Queue driver']
     ]
   }
 ]
@@ -202,6 +208,8 @@ const metricMap = computed(() => new Map(
   authorizedMetrics.value.map(metric => [metric.key, metric])
 ))
 
+const primaryMetrics = computed(() => metricRows(primaryMetricKeys))
+
 const listSections = computed(() => listSectionDefinitions
   .filter(definition =>
     sessionStore.can(definition.permission)
@@ -213,36 +221,12 @@ const listSections = computed(() => listSectionDefinitions
     rows: dashboard.value.sections[definition.key]
   })))
 
-const summarySections = computed(() => summarySectionDefinitions
-  .filter(definition =>
-    sessionStore.can(definition.permission)
-      && hasOwn(dashboard.value?.sections, definition.key)
-  )
-  .map(definition => ({
-    ...definition,
-    data: dashboard.value.sections[definition.key]
-  })))
-
 const salesChart = computed(() => {
   if (!sessionStore.can('pos.access|sales.view|reports.sales.view')) return null
   return hasOwn(dashboard.value?.charts, 'sales_last_7_days')
     ? dashboard.value.charts.sales_last_7_days
     : null
 })
-
-const inventorySummary = computed(() => [
-  'total_products',
-  'low_stock',
-  'out_of_stock',
-  'pending_restock',
-  'ready_for_receiving'
-].map(key => metricMap.value.get(key)).filter(Boolean))
-
-const approvalQueues = computed(() => [
-  'pending_hr_requests',
-  'submitted_purchase_orders',
-  'approved_restock_requests'
-].map(key => metricMap.value.get(key)).filter(Boolean))
 
 const accountsReceivable = computed(() =>
   sessionStore.can('finance.manage|reports.finance.view')
@@ -257,6 +241,125 @@ const employeeSection = computed(() =>
     ? dashboard.value.sections.employee
     : null
 )
+
+const linkedEmployeeSection = computed(() =>
+  employeeSection.value?.linked === true ? employeeSection.value : null
+)
+
+const secondaryPanels = computed(() => [
+  {
+    key: 'sales-finance',
+    column: 0,
+    order: 0,
+    title: 'Sales & Finance',
+    description: 'Authorized sales and financial totals in one compact view.',
+    groups: [
+      {
+        key: 'sales-finance-summary',
+        rows: [
+          ...metricRows(salesFinanceMetricKeys),
+          ...accountsReceivableRows()
+        ]
+      }
+    ]
+  },
+  {
+    key: 'human-resources',
+    column: 1,
+    order: 1,
+    title: 'Human Resources',
+    description: 'Authorized workforce, attendance, and payroll details.',
+    groups: [
+      {
+        key: 'workforce',
+        title: 'Workforce',
+        rows: metricRows(['employees_on_leave'])
+      },
+      {
+        key: 'attendance',
+        title: 'Attendance today',
+        rows: sectionRows(
+          'attendance_today',
+          'hr.attendance.view|reports.hr.view',
+          [
+            ['records', 'Records', 'number'],
+            ['present', 'Present', 'number'],
+            ['late', 'Late', 'number'],
+            ['absent', 'Absent', 'number']
+          ]
+        )
+      },
+      {
+        key: 'payroll',
+        title: 'Payroll summary',
+        rows: sectionRows(
+          'payroll_summary',
+          'payroll.manage|reports.payroll.view',
+          [
+            ['period_start', 'Period start', 'date'],
+            ['period_end', 'Period end', 'date'],
+            ['period_records', 'Period records', 'number'],
+            ['period_net_pay', 'Period net pay', 'money'],
+            ['outstanding_records', 'Outstanding records', 'number']
+          ]
+        )
+      }
+    ]
+  },
+  {
+    key: 'inventory-purchasing',
+    column: 0,
+    order: 2,
+    title: 'Inventory & Purchasing',
+    description: 'Authorized stock and procurement totals.',
+    groups: [
+      {
+        key: 'inventory-purchasing-summary',
+        rows: metricRows(inventoryPurchasingMetricKeys)
+      }
+    ]
+  },
+  {
+    key: 'system-health',
+    column: 1,
+    order: 3,
+    title: 'System Health',
+    description: 'Current authorized application, database, and access signals.',
+    groups: [
+      {
+        key: 'system-health-summary',
+        rows: [
+          ...metricRows(['roles']),
+          ...sectionRows(
+            'system_health',
+            'system.settings.manage|system.backups.manage',
+            [
+              ['environment', 'Environment'],
+              ['debug', 'Debug mode', 'boolean'],
+              ['database_integrity', 'Database integrity'],
+              ['foreign_key_violations', 'Foreign-key violations', 'number'],
+              ['cache_driver', 'Cache driver'],
+              ['queue_driver', 'Queue driver']
+            ]
+          )
+        ]
+      }
+    ]
+  }
+].map(panel => ({
+  ...panel,
+  groups: panel.groups.filter(group => group.rows.length)
+})).filter(panel => panel.groups.length))
+
+const dashboardColumns = computed(() => {
+  const items = [
+    ...secondaryPanels.value.map(panel => ({ ...panel, type: 'summary' })),
+    ...listSections.value.map(section => ({ ...section, type: 'table' }))
+  ]
+  return [0, 1]
+    .map(column => items.filter(item => item.column === column))
+    .filter(column => column.length)
+})
 
 const quickActions = computed(() => quickActionDefinitions
   .filter(([, , permission]) => sessionStore.can(permission))
@@ -333,6 +436,46 @@ function metricValue(metric) {
     : formatNumber(metric.value)
 }
 
+function metricRows(keys) {
+  return keys
+    .map(key => metricMap.value.get(key))
+    .filter(Boolean)
+    .map(metric => ({
+      key: metric.key,
+      label: metricLabelOverrides[metric.key] || metric.label,
+      value: metricValue(metric)
+    }))
+}
+
+function sectionRows(key, permission, fields) {
+  if (!sessionStore.can(permission) || !hasOwn(dashboard.value?.sections, key)) return []
+  const data = dashboard.value.sections[key]
+  return fields
+    .filter(([field]) => hasOwn(data, field))
+    .map(([field, label, format]) => ({
+      key: `${key}-${field}`,
+      label,
+      value: displayValue(data[field], format)
+    }))
+}
+
+function accountsReceivableRows() {
+  if (!accountsReceivable.value) return []
+  if (accountsReceivable.value.supported === false) {
+    return [{
+      key: 'accounts-receivable',
+      label: 'Accounts receivable',
+      value: 'Not available',
+      note: accountsReceivable.value.message || 'This information is not represented by the current system.'
+    }]
+  }
+  return [{
+    key: 'accounts-receivable',
+    label: 'Accounts receivable',
+    value: displayValue(accountsReceivable.value.total, 'money')
+  }]
+}
+
 function displayValue(value, format = '') {
   if (value === null || value === undefined || value === '') return '—'
   if (format === 'money') return formatMoney(value)
@@ -387,12 +530,12 @@ onMounted(load)
     />
 
     <template v-else-if="dashboard">
-      <section v-if="authorizedMetrics.length" class="fm-dashboard__kpis" aria-label="Key metrics">
+      <section v-if="primaryMetrics.length" class="fm-dashboard__kpis" aria-label="Key metrics">
         <UiKpiCard
-          v-for="metric in authorizedMetrics"
+          v-for="metric in primaryMetrics"
           :key="metric.key"
           :label="metric.label"
-          :value="metricValue(metric)"
+          :value="metric.value"
         />
       </section>
 
@@ -406,170 +549,88 @@ onMounted(load)
       </section>
 
       <section
-        v-if="inventorySummary.length || approvalQueues.length || summarySections.length || accountsReceivable || employeeSection"
-        class="fm-dashboard__grid"
-        aria-label="Dashboard summaries"
+        v-if="dashboardColumns.length"
+        class="fm-dashboard__columns"
+        :class="{ 'fm-dashboard__columns--single': dashboardColumns.length === 1 }"
+        aria-label="Dashboard summaries and recent activity"
       >
-        <UiSectionCard
-          v-if="inventorySummary.length"
-          title="Inventory and low stock"
-          description="Current authorized inventory totals."
+        <div
+          v-for="column in dashboardColumns"
+          :key="column[0].column"
+          class="fm-dashboard__column"
         >
-          <dl class="fm-dashboard__summary-list">
-            <template v-for="metric in inventorySummary" :key="metric.key">
-              <dt>{{ metric.label }}</dt>
-              <dd>{{ metricValue(metric) }}</dd>
-            </template>
-          </dl>
-        </UiSectionCard>
-
-        <UiSectionCard
-          v-if="approvalQueues.length"
-          title="Approval queues"
-          description="Current authorized work awaiting attention."
-        >
-          <dl class="fm-dashboard__summary-list">
-            <template v-for="metric in approvalQueues" :key="metric.key">
-              <dt>{{ metric.label }}</dt>
-              <dd>{{ metricValue(metric) }}</dd>
-            </template>
-          </dl>
-        </UiSectionCard>
-
-        <UiSectionCard
-          v-for="section in summarySections"
-          :key="section.key"
-          :title="section.title"
-          :description="section.description"
-        >
-          <dl class="fm-dashboard__summary-list">
-            <template v-for="[key, label, format] in section.fields" :key="key">
-              <template v-if="hasOwn(section.data, key)">
-                <dt>{{ label }}</dt>
-                <dd>{{ displayValue(section.data[key], format) }}</dd>
-              </template>
-            </template>
-          </dl>
-        </UiSectionCard>
-
-        <UiSectionCard
-          v-if="accountsReceivable"
-          title="Accounts receivable"
-          description="Receivables information exposed by the dashboard service."
-        >
-          <UiEmptyState
-            v-if="accountsReceivable.supported === false"
-            title="Accounts receivable is not available"
-            :description="accountsReceivable.message || 'This information is not represented by the current system.'"
-          />
-          <dl v-else class="fm-dashboard__summary-list">
-            <dt>Total</dt>
-            <dd>{{ displayValue(accountsReceivable.total, 'money') }}</dd>
-          </dl>
-        </UiSectionCard>
-
-        <UiSectionCard
-          v-if="employeeSection"
-          title="Employee overview"
-          description="Personal employment information linked to your account."
-        >
-          <UiEmptyState
-            v-if="employeeSection.linked === false"
-            title="Employee profile is not available"
-            description="Your account is not linked to an employee record."
-          />
-          <template v-else>
-            <dl class="fm-dashboard__summary-list">
-              <template v-if="hasOwn(employeeSection, 'leave_balance')">
-                <dt>Leave balance</dt>
-                <dd>{{ displayValue(employeeSection.leave_balance, 'number') }}</dd>
-              </template>
-              <template v-if="hasOwn(employeeSection, 'schedule_supported')">
-                <dt>Schedule</dt>
-                <dd>{{ employeeSection.schedule_supported ? 'Available' : 'Not available' }}</dd>
-              </template>
-            </dl>
-            <dl v-if="employeeSection.attendance_summary" class="fm-dashboard__summary-list">
-              <template v-for="(value, key) in employeeSection.attendance_summary" :key="key">
-                <dt>{{ key.replaceAll('_', ' ') }}</dt>
-                <dd>{{ displayValue(value, 'number') }}</dd>
-              </template>
-            </dl>
-            <section v-if="hasOwn(employeeSection, 'current_payroll')" class="fm-dashboard__subsection">
-              <h3>Current payroll</h3>
-              <UiEmptyState
-                v-if="!employeeSection.current_payroll"
-                title="No payroll record"
-                description="No payroll record is available for the linked employee."
-              />
-              <dl v-else class="fm-dashboard__summary-list">
-                <dt>Period start</dt>
-                <dd>{{ displayValue(employeeSection.current_payroll.pay_period_start, 'date') }}</dd>
-                <dt>Period end</dt>
-                <dd>{{ displayValue(employeeSection.current_payroll.pay_period_end, 'date') }}</dd>
-                <dt>Net pay</dt>
-                <dd>{{ displayValue(employeeSection.current_payroll.net_pay, 'money') }}</dd>
-                <dt>Status</dt>
-                <dd>{{ displayValue(employeeSection.current_payroll.status) }}</dd>
-              </dl>
-            </section>
-            <section v-if="Array.isArray(employeeSection.recent_hr_requests)" class="fm-dashboard__subsection">
-              <h3>Recent HR requests</h3>
-              <UiEmptyState
-                v-if="employeeSection.recent_hr_requests.length === 0"
-                title="No recent HR requests"
-                description="No HR requests are available for the linked employee."
-              />
-              <div v-else class="ui-table-shell__scroll">
-                <table class="fm-dashboard__table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Date</th>
-                      <th scope="col">Type</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="request in employeeSection.recent_hr_requests" :key="request.id">
-                      <td>{{ displayValue(request.created_at, 'datetime') }}</td>
-                      <td>{{ displayValue(request.request_type) }}</td>
-                      <td>{{ displayValue(request.status) }}</td>
-                      <td>{{ displayValue(request.reason) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+          <template v-for="item in column" :key="item.key">
+            <UiSectionCard
+              v-if="item.type === 'summary'"
+              class="fm-dashboard__column-card fm-dashboard__summary-card"
+              :style="{ '--fm-dashboard-order': item.order }"
+              :title="item.title"
+              :description="item.description"
+            >
+              <div class="fm-dashboard__summary-groups">
+                <section
+                  v-for="group in item.groups"
+                  :key="group.key"
+                  class="fm-dashboard__summary-group"
+                >
+                  <h3 v-if="group.title" class="fm-dashboard__summary-title">{{ group.title }}</h3>
+                  <dl class="fm-dashboard__summary-list">
+                    <template v-for="row in group.rows" :key="row.key">
+                      <dt>{{ row.label }}</dt>
+                      <dd>
+                        <span>{{ row.value }}</span>
+                        <small v-if="row.note">{{ row.note }}</small>
+                      </dd>
+                    </template>
+                  </dl>
+                </section>
               </div>
-            </section>
+            </UiSectionCard>
+
+            <UiTableShell
+              v-else
+              class="fm-dashboard__column-card fm-dashboard__table-card"
+              :style="{ '--fm-dashboard-order': item.order }"
+              :title="item.title"
+              :description="item.description"
+              :empty="item.rows.length === 0 && !item.compactEmptyText"
+              :empty-title="item.emptyTitle"
+              :empty-description="item.emptyDescription"
+            >
+              <table v-if="item.rows.length" class="fm-dashboard__table">
+                <thead>
+                  <tr>
+                    <th v-for="[key, label] in item.columns" :key="key" scope="col">{{ label }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, rowIndex) in item.rows" :key="rowKey(row, rowIndex)">
+                    <td v-for="[key, , format] in item.columns" :key="key">
+                      {{ displayValue(row[key], format) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-else class="fm-dashboard__compact-empty">{{ item.compactEmptyText }}</p>
+            </UiTableShell>
           </template>
-        </UiSectionCard>
+        </div>
       </section>
 
-      <section v-if="listSections.length" class="fm-dashboard__tables" aria-label="Recent dashboard activity">
-        <UiTableShell
-          v-for="section in listSections"
-          :key="section.key"
-          :title="section.title"
-          :description="section.description"
-          :empty="section.rows.length === 0"
-          :empty-title="section.emptyTitle"
-          :empty-description="section.emptyDescription"
-        >
-          <table class="fm-dashboard__table">
-            <thead>
-              <tr>
-                <th v-for="[key, label] in section.columns" :key="key" scope="col">{{ label }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, index) in section.rows" :key="rowKey(row, index)">
-                <td v-for="[key, , format] in section.columns" :key="key">
-                  {{ displayValue(row[key], format) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </UiTableShell>
+      <section v-if="linkedEmployeeSection" class="ui-card fm-dashboard__employee-strip">
+        <div>
+          <p class="fm-dashboard__employee-eyebrow">Employee profile linked</p>
+          <h2>Personal details are available in Self-Service</h2>
+          <p>
+            <template v-if="hasOwn(linkedEmployeeSection, 'leave_balance')">
+              Current leave balance: {{ displayValue(linkedEmployeeSection.leave_balance, 'number') }}.
+            </template>
+            Review attendance, payroll, and HR requests in your personal workspace.
+          </p>
+        </div>
+        <RouterLink class="ui-button ui-button--secondary" to="/self-service">
+          Open self-service
+        </RouterLink>
       </section>
 
       <UiSectionCard
