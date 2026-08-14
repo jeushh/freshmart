@@ -49,8 +49,13 @@ The setup helper:
 5. runs `php artisan migrate --force`; and
 6. runs seeders only when `--seed` or `FRESHMART_SEED_DATABASE=1` is supplied.
 
-Open `http://127.0.0.1:5173`. No XAMPP is required; the API uses PHP's local
-development server.
+Open `http://127.0.0.1:5173` or `http://localhost:5173`. No XAMPP is required;
+the API uses PHP's local development server. The Vite development proxy keeps
+Sanctum cookies first-party in Safari even if the browser URL and configured
+API target use different loopback host names.
+
+If login reports a network or CORS error, follow the
+[local authentication troubleshooting guide](docs/LOCAL_DEVELOPMENT.md#local-authentication-and-safari).
 
 ## Migrations
 
