@@ -5,7 +5,9 @@ export default defineConfig({
   plugins: [vue()],
   base: './',
   server: {
+    host: '127.0.0.1',
     port: 5173,
+    strictPort: true,
     proxy: {
       '/backend': 'http://localhost'
     }
