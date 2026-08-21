@@ -263,6 +263,33 @@ class BusinessRulesTest extends TestCase
         ])->assertUnprocessable();
     }
 
+    public function test_self_service_rejects_an_account_without_an_employee_link(): void
+    {
+        $this->actingAs($this->userWithPermissions('self-service-unlinked-test', ['employee.self']));
+
+        $this->getJson('/api/workspace/self')
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'This account is not linked to an employee.');
+    }
+
+    public function test_self_service_rejects_an_account_with_a_stale_employee_link(): void
+    {
+        $user = $this->userWithPermissions('self-service-stale-link-test', ['employee.self']);
+
+        DB::statement('PRAGMA foreign_keys = OFF');
+        try {
+            DB::table('admin_users')->where('id', $user->id)->update(['employee_id' => 999999]);
+        } finally {
+            DB::statement('PRAGMA foreign_keys = ON');
+        }
+
+        $this->actingAs(User::findOrFail($user->id));
+
+        $this->getJson('/api/workspace/self')
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'The linked employee record no longer exists.');
+    }
+
     public function test_pos_rejects_inactive_and_duplicate_products_without_changing_stock(): void
     {
         $this->actingAs(User::where('username', 'cashier')->firstOrFail());
