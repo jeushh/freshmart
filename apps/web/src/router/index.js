@@ -11,6 +11,13 @@ import InventoryView from '../modules/workspaces/InventoryView.vue'
 import RestockRequestsView from '../modules/workspaces/RestockRequestsView.vue'
 import PurchaseOrdersView from '../modules/workspaces/PurchaseOrdersView.vue'
 import FinanceView from '../modules/workspaces/FinanceView.vue'
+import FinanceRequestsView from '../modules/workspaces/FinanceRequestsView.vue'
+import FinanceTransactionsView from '../modules/workspaces/FinanceTransactionsView.vue'
+import SupplierInvoicesView from '../modules/workspaces/SupplierInvoicesView.vue'
+import SupplierInvoiceCreateView from '../modules/workspaces/SupplierInvoiceCreateView.vue'
+import SupplierInvoiceDetailView from '../modules/workspaces/SupplierInvoiceDetailView.vue'
+import AccountsPayableView from '../modules/workspaces/AccountsPayableView.vue'
+import AccountsPayableDetailView from '../modules/workspaces/AccountsPayableDetailView.vue'
 import PosView from '../modules/workspaces/PosView.vue'
 import AdminView from '../modules/workspaces/AdminView.vue'
 import RolesView from '../modules/workspaces/RolesView.vue'
@@ -46,6 +53,13 @@ const routes = [
         meta: { permission: 'procurement.stock.receive' }
       },
       { path: 'finance', component: FinanceView, meta: { permission: 'finance.requests.view|finance.manage' } },
+      { path: 'finance/requests', component: FinanceRequestsView, meta: { permission: 'finance.requests.view' } },
+      { path: 'finance/transactions', component: FinanceTransactionsView, meta: { permission: 'finance.manage' } },
+      { path: 'finance/supplier-invoices', component: SupplierInvoicesView, meta: { permission: 'finance.manage' } },
+      { path: 'finance/supplier-invoices/new', component: SupplierInvoiceCreateView, meta: { permission: 'finance.manage' } },
+      { path: 'finance/supplier-invoices/:invoiceId', component: SupplierInvoiceDetailView, meta: { permission: 'finance.manage' } },
+      { path: 'finance/accounts-payable', component: AccountsPayableView, meta: { permission: 'finance.manage' } },
+      { path: 'finance/accounts-payable/:payableId', component: AccountsPayableDetailView, meta: { permission: 'finance.manage' } },
       { path: 'pos', component: PosView, meta: { permission: 'pos.access' } },
       {
         path: 'admin',
@@ -74,6 +88,9 @@ router.beforeEach(async to => {
   if (sessionStore.state.loading) await sessionStore.refresh()
   if (!to.meta.public && !sessionStore.state.authenticated) return '/login'
   if (to.path === '/login' && sessionStore.state.authenticated) return sessionStore.homePath()
+  if (to.path === '/finance' && sessionStore.can('finance.requests.view') && !sessionStore.can('finance.manage')) {
+    return { path: '/finance/requests', replace: true }
+  }
   if (to.meta.permission && !sessionStore.can(to.meta.permission)) return '/forbidden'
 })
 

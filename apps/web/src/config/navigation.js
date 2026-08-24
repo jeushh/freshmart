@@ -141,11 +141,35 @@ export const navigationGroups = [
     items: [
       {
         to: '/finance',
-        label: 'Finance Overview',
+        label: 'Overview',
         permission: 'finance.requests.view|finance.manage',
         icon: icon(
           'M4 20V10m5 10V4m6 16v-7m5 7V7'
         )
+      },
+      {
+        to: '/finance/requests',
+        label: 'Finance Requests',
+        permission: 'finance.requests.view',
+        icon: icon('M6 4h9l3 3v13H6zM15 4v4h4', 'M9 13h6m-6 4h4')
+      },
+      {
+        to: '/finance/transactions',
+        label: 'Transactions',
+        permission: 'finance.manage',
+        icon: icon('M5 19V9m5 10V5m5 14v-6m5 6V3')
+      },
+      {
+        to: '/finance/supplier-invoices',
+        label: 'Supplier Invoices',
+        permission: 'finance.manage',
+        icon: icon('M6 3h9l3 3v15H6zM15 3v4h4', 'M9 12h6m-6 4h6')
+      },
+      {
+        to: '/finance/accounts-payable',
+        label: 'Accounts Payable',
+        permission: 'finance.manage',
+        icon: icon('M4 6h16v12H4z', 'M8 14h8M8 10h4')
       }
     ]
   },
