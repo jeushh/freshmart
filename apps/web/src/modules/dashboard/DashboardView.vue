@@ -185,7 +185,7 @@ const listSectionDefinitions = [
 
 const quickActionDefinitions = [
   ['Manage users', '/admin', 'system.users.manage'],
-  ['Review finance requests', '/finance', 'finance.requests.approve'],
+  ['Review finance requests', '/finance/requests', 'finance.requests.approve'],
   ['Review restock requests', '/restock-requests', 'restock.approve'],
   ['Receive stock', '/stock-receiving', 'procurement.stock.receive'],
   ['Review inventory', '/inventory', 'inventory.manage'],
