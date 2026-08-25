@@ -175,7 +175,7 @@ class DemoDataSeeder extends Seeder
                 'name' => 'Mango (Ripe)',
                 'price' => 150,
                 'category' => 'Fruits',
-                'stock_quantity' => 24,
+                'stock_quantity' => 3,
                 'unit' => 'kg',
                 'emoji' => '🥭',
                 'cost_price' => 97.50,

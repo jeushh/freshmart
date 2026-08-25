@@ -53,13 +53,17 @@ async function refreshSettings() {
   return state.settings
 }
 function homePath() {
+  if (state.landingPage === 'inventory') {
+    if (can('inventory.manage')) return '/inventory'
+    if (can('restock.approve')) return '/'
+  }
+
   const landing = {
     admin: ['/admin', 'system.users.manage|system.roles.manage|system.audit.view|system.settings.manage'],
     pos: ['/pos', 'pos.access'],
     hr: ['/employees', 'hr.employees.view'],
     finance: ['/finance', 'finance.requests.view|finance.manage'],
-    employee: ['/self-service', 'employee.self'],
-    inventory: ['/inventory', 'inventory.manage|restock.approve']
+    employee: ['/self-service', 'employee.self']
   }[state.landingPage]
   return landing && can(landing[1]) ? landing[0] : '/'
 }

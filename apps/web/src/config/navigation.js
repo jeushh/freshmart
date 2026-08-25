@@ -8,6 +8,7 @@ export const navigationGroups = [
         to: '/',
         label: 'Dashboard',
         permission: '',
+        hideOnLanding: ['finance'],
         icon: icon(
           'M4 13h6V4H4v9Zm10 7h6V11h-6v9ZM4 20h6v-3H4v3Zm10-13h6V4h-6v3Z'
         )
@@ -141,7 +142,7 @@ export const navigationGroups = [
     items: [
       {
         to: '/finance',
-        label: 'Overview',
+        label: 'Finance Overview',
         permission: 'finance.requests.view|finance.manage',
         icon: icon(
           'M4 20V10m5 10V4m6 16v-7m5 7V7'

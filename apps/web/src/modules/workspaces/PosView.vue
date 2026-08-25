@@ -20,6 +20,16 @@ const productRefreshError = ref('')
 const checkoutButton = ref(null)
 const cancelButton = ref(null)
 const dialogPanel = ref(null)
+const refundStep = ref('')
+const selectedRefundLine = ref(null)
+const refundQuantity = ref(1)
+const refundReason = ref('')
+const refundSubmitting = ref(false)
+const refundError = ref('')
+const refundSuccess = ref(null)
+const confirmedRefundedBySku = ref({})
+const refundCancelButton = ref(null)
+const refundDialogPanel = ref(null)
 const baseTotal = computed(() => cart.value.reduce((sum, item) => sum + item.price * item.quantity, 0))
 const itemCount = computed(() => cart.value.reduce((sum, item) => sum + item.quantity, 0))
 const tax = computed(() => {
@@ -103,6 +113,29 @@ function handleDialogKeydown(event) {
   }
 }
 
+function handleRefundDialogKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    cancelRefund()
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const focusable = [...refundDialogPanel.value.querySelectorAll(
+    'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex="-1"])'
+  )]
+  if (!focusable.length) return
+  const first = focusable[0]
+  const last = focusable.at(-1)
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 function completedSaleSnapshot(result) {
   const settings = sessionStore.state.settings
   const items = Object.freeze(result.items.map(item => Object.freeze({ ...item })))
@@ -156,8 +189,93 @@ function printReceipt() {
   window.print()
 }
 
+function refundedQuantityFor(item) {
+  return confirmedRefundedBySku.value[item.sku] || 0
+}
+
+async function openRefund(line) {
+  if (!sessionStore.can('pos.refund')) return
+  selectedRefundLine.value = line
+  refundQuantity.value = 1
+  refundReason.value = ''
+  refundError.value = ''
+  refundStep.value = 'configure'
+  await nextTick()
+  refundCancelButton.value?.focus()
+}
+
+function resetRefundFlow() {
+  refundStep.value = ''
+  selectedRefundLine.value = null
+  refundQuantity.value = 1
+  refundReason.value = ''
+  refundError.value = ''
+}
+
+function resetRefundSession() {
+  resetRefundFlow()
+  refundSuccess.value = null
+  confirmedRefundedBySku.value = {}
+}
+
+function cancelRefund() {
+  if (refundSubmitting.value) return
+  resetRefundFlow()
+}
+
+function reviewRefund() {
+  const quantity = Number(refundQuantity.value)
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    refundError.value = 'Refund quantity must be a positive whole number.'
+    return
+  }
+  if (quantity > Number(selectedRefundLine.value?.quantity || 0)) {
+    refundError.value = 'Refund quantity cannot exceed the original sold quantity shown on this receipt.'
+    return
+  }
+  if (!refundReason.value.trim()) {
+    refundError.value = 'A refund reason is required.'
+    return
+  }
+  refundError.value = ''
+  refundStep.value = 'review'
+}
+
+function backToRefundConfiguration() {
+  if (refundSubmitting.value) return
+  refundError.value = ''
+  refundStep.value = 'configure'
+}
+
+async function confirmRefund() {
+  if (refundSubmitting.value || refundStep.value !== 'review' || !completedSale.value || !selectedRefundLine.value) return
+  refundSubmitting.value = true
+  refundError.value = ''
+  try {
+    const result = await api.post('/workspace/pos/refunds', {
+      order_id: completedSale.value.order_id,
+      item_sku: selectedRefundLine.value.sku,
+      quantity: Number(refundQuantity.value),
+      reason: refundReason.value.trim()
+    })
+    const itemSku = result.item_sku
+    confirmedRefundedBySku.value = {
+      ...confirmedRefundedBySku.value,
+      [itemSku]: (confirmedRefundedBySku.value[itemSku] || 0) + Number(result.quantity_refunded)
+    }
+    refundSuccess.value = result
+    resetRefundFlow()
+  } catch (requestError) {
+    refundError.value = requestError.message
+    refundStep.value = 'configure'
+  } finally {
+    refundSubmitting.value = false
+  }
+}
+
 async function newSale() {
   const refreshRequired = !productsReady.value || Boolean(productRefreshError.value)
+  resetRefundSession()
   completedSale.value = null
   cart.value = []
   payment.value = 'Cash'
@@ -176,6 +294,7 @@ async function checkout() {
       items: cart.value.map(item => ({ product_id: item.id, quantity: item.quantity })),
       payment_method: payment.value
     })
+    resetRefundSession()
     completedSale.value = completedSaleSnapshot(result)
     message.value = `Order ${result.order_id} completed — ${formatMoney(result.total)}`
     confirming.value = false
@@ -231,8 +350,19 @@ onMounted(load)
             <strong>{{ item.name }}</strong>
             <small>{{ item.sku }} · {{ item.quantity }} × {{ formatReceiptMoney(item.unit_price) }}</small>
           </div>
-          <strong>{{ formatReceiptMoney(item.total) }}</strong>
+          <div class="receipt__item-actions">
+            <strong>{{ formatReceiptMoney(item.total) }}</strong>
+            <div v-if="sessionStore.can('pos.refund')" class="receipt__refund">
+              <small v-if="refundedQuantityFor(item)">{{ refundedQuantityFor(item) }} of {{ item.quantity }} refunded</small>
+              <UiButton size="sm" variant="secondary" @click="openRefund(item)">Refund item</UiButton>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <div v-if="refundSuccess" class="receipt__refund-success" role="status">
+        <strong>Refund completed: {{ refundSuccess.quantity_refunded }} {{ refundSuccess.quantity_refunded === 1 ? 'unit' : 'units' }} of {{ refundSuccess.item_sku }}.</strong>
+        <span>{{ formatReceiptMoney(refundSuccess.refund_amount) }} was refunded. Stock was restored.</span>
       </div>
 
       <dl class="receipt__totals">
@@ -364,6 +494,73 @@ onMounted(load)
             Complete sale
           </UiButton>
         </footer>
+      </section>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="refundStep"
+      class="checkout-dialog-backdrop"
+      @click.self="cancelRefund"
+      @keydown="handleRefundDialogKeydown"
+    >
+      <section
+        ref="refundDialogPanel"
+        class="checkout-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="refund-dialog-title"
+        aria-describedby="refund-dialog-summary"
+      >
+        <header class="checkout-dialog__header">
+          <div>
+            <p class="checkout-dialog__eyebrow">Receipt refund</p>
+            <h2 id="refund-dialog-title">{{ refundStep === 'review' ? 'Review refund' : 'Refund item' }}</h2>
+          </div>
+        </header>
+
+        <form v-if="refundStep === 'configure'" class="checkout-dialog__body refund-form" @submit.prevent="reviewRefund">
+          <p id="refund-dialog-summary">Select the quantity and reason before reviewing this refund.</p>
+          <dl class="refund-details">
+            <div><dt>Item</dt><dd>{{ selectedRefundLine.name }}</dd></div>
+            <div><dt>SKU</dt><dd>{{ selectedRefundLine.sku }}</dd></div>
+            <div><dt>Original sold quantity</dt><dd>{{ selectedRefundLine.quantity }}</dd></div>
+          </dl>
+          <label>
+            Quantity to refund
+            <input v-model.number="refundQuantity" type="number" min="1" :max="selectedRefundLine.quantity" step="1" required>
+          </label>
+          <label>
+            Reason
+            <textarea v-model.trim="refundReason" rows="3" maxlength="500" required></textarea>
+          </label>
+          <p class="field-help">The server confirms the refundable quantity when you confirm this refund.</p>
+          <p v-if="refundError" class="form-error" role="alert">{{ refundError }}</p>
+          <footer class="checkout-dialog__actions">
+            <UiButton ref="refundCancelButton" type="button" variant="secondary" :disabled="refundSubmitting" @click="cancelRefund">
+              Cancel
+            </UiButton>
+            <UiButton type="submit" :disabled="refundSubmitting">Review refund</UiButton>
+          </footer>
+        </form>
+
+        <div v-else class="checkout-dialog__body">
+          <p id="refund-dialog-summary">Confirm the refund details below. The final refund amount is calculated by the server.</p>
+          <dl class="refund-details">
+            <div><dt>Receipt / order ID</dt><dd>{{ completedSale.order_id }}</dd></div>
+            <div><dt>Item</dt><dd>{{ selectedRefundLine.name }}</dd></div>
+            <div><dt>SKU</dt><dd>{{ selectedRefundLine.sku }}</dd></div>
+            <div><dt>Requested quantity</dt><dd>{{ refundQuantity }}</dd></div>
+            <div><dt>Reason</dt><dd>{{ refundReason }}</dd></div>
+          </dl>
+          <p v-if="refundError" class="form-error" role="alert">{{ refundError }}</p>
+          <footer class="checkout-dialog__actions">
+            <UiButton variant="secondary" :disabled="refundSubmitting" @click="backToRefundConfiguration">Back</UiButton>
+            <UiButton variant="secondary" :disabled="refundSubmitting" @click="cancelRefund">Cancel</UiButton>
+            <UiButton :loading="refundSubmitting" loading-label="Confirming refund" @click="confirmRefund">Confirm Refund</UiButton>
+          </footer>
+        </div>
       </section>
     </div>
   </Teleport>
@@ -519,8 +716,33 @@ onMounted(load)
   overflow-wrap: anywhere;
 }
 
-.receipt__item > strong {
+.receipt__item-actions {
   flex: 0 0 auto;
+  display: grid;
+  justify-items: end;
+  gap: var(--fm-space-2);
+}
+
+.receipt__refund {
+  display: grid;
+  justify-items: end;
+  gap: var(--fm-space-1);
+}
+
+.receipt__refund small {
+  color: var(--fm-color-text-muted);
+  font-size: var(--fm-font-size-xs);
+}
+
+.receipt__refund-success {
+  display: grid;
+  gap: var(--fm-space-1);
+  margin: var(--fm-space-5);
+  padding: var(--fm-space-3);
+  border: var(--fm-border-width) solid var(--fm-color-success-600);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-color-success-50);
+  color: var(--fm-color-success-700);
 }
 
 .receipt__grand-total {
@@ -598,6 +820,43 @@ onMounted(load)
 .checkout-dialog__body {
   display: grid;
   gap: var(--fm-space-4);
+}
+
+.refund-form label {
+  display: grid;
+  gap: var(--fm-space-2);
+  color: var(--fm-color-text-primary);
+  font-weight: var(--fm-font-weight-semibold);
+}
+
+.refund-form input,
+.refund-form textarea {
+  width: 100%;
+  border: var(--fm-border-width) solid var(--fm-color-border);
+  border-radius: var(--fm-radius-control);
+  padding: var(--fm-space-3);
+  color: var(--fm-color-text-primary);
+  background: var(--fm-color-surface);
+  font: inherit;
+}
+
+.refund-details {
+  display: grid;
+  gap: var(--fm-space-2);
+  margin: 0;
+}
+
+.refund-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--fm-space-4);
+}
+
+.refund-details dd {
+  margin: 0;
+  font-weight: var(--fm-font-weight-semibold);
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .checkout-dialog__items {
@@ -752,6 +1011,11 @@ onMounted(load)
   .receipt__metadata > div,
   .receipt__totals > div {
     gap: 3mm;
+  }
+
+  .receipt__refund,
+  .receipt__refund-success {
+    display: none !important;
   }
 }
 </style>
