@@ -85,6 +85,10 @@
   margin-inline-start: auto;
 }
 
+.fm-sidebar__mobile-close {
+  display: none;
+}
+
 .fm-sidebar__nav {
   min-width: 0;
   overflow-x: hidden;
@@ -141,6 +145,16 @@
   background: var(--fm-color-primary-50);
   color: var(--fm-color-primary-700);
   font-weight: var(--fm-font-weight-semibold);
+}
+
+.fm-sidebar__nav-link[aria-current="page"]::before {
+  position: absolute;
+  inset-block: var(--fm-space-2);
+  inset-inline-start: 0;
+  width: calc(var(--fm-border-width) * 3);
+  border-radius: 0 var(--fm-radius-control) var(--fm-radius-control) 0;
+  background: var(--fm-color-primary-600);
+  content: '';
 }
 
 .fm-sidebar__nav-icon,
@@ -263,6 +277,12 @@
 
   .fm-sidebar__collapse {
     display: none;
+  }
+
+  .fm-sidebar__mobile-close {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-inline-start: auto;
   }
 
   .fm-shell__sidebar--open .fm-sidebar__brand-copy,

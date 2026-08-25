@@ -23,10 +23,13 @@ const visibleGroups = computed(() => navigationGroups
   .map(group => ({
     ...group,
     items: group.items.filter(item =>
-      !item.permission || sessionStore.can(item.permission)
+      (!item.permission || sessionStore.can(item.permission))
+      && !item.hideOnLanding?.includes(sessionStore.state.landingPage)
     )
   }))
   .filter(group => group.items.length))
+
+const homePath = computed(() => sessionStore.homePath())
 
 const displayName = computed(() =>
   sessionStore.state.user?.fullName
@@ -101,7 +104,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
   <div class="fm-sidebar">
     <header class="fm-sidebar__header">
-      <RouterLink class="fm-sidebar__brand" to="/" aria-label="FreshMart dashboard">
+      <RouterLink class="fm-sidebar__brand" :to="homePath" aria-label="FreshMart workspace home">
         <span class="fm-sidebar__brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none">
             <path d="M5 9h14l-1 11H6L5 9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
@@ -113,6 +116,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           <small>Business System</small>
         </span>
       </RouterLink>
+      <UiButton
+        class="fm-sidebar__mobile-close"
+        variant="ghost"
+        icon-only
+        aria-label="Close navigation"
+        @click="hideMobile(true)"
+      >
+        <svg class="fm-sidebar__action-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
+      </UiButton>
       <UiButton
         class="fm-sidebar__collapse"
         variant="ghost"
