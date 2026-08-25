@@ -10,6 +10,7 @@ import HrRequestsView from '../modules/workspaces/HrRequestsView.vue'
 import InventoryView from '../modules/workspaces/InventoryView.vue'
 import RestockRequestsView from '../modules/workspaces/RestockRequestsView.vue'
 import PurchaseOrdersView from '../modules/workspaces/PurchaseOrdersView.vue'
+import StockReceivingView from '../modules/workspaces/StockReceivingView.vue'
 import FinanceView from '../modules/workspaces/FinanceView.vue'
 import FinanceRequestsView from '../modules/workspaces/FinanceRequestsView.vue'
 import FinanceTransactionsView from '../modules/workspaces/FinanceTransactionsView.vue'
@@ -49,7 +50,7 @@ const routes = [
       },
       {
         path: 'stock-receiving',
-        component: PurchaseOrdersView,
+        component: StockReceivingView,
         meta: { permission: 'procurement.stock.receive' }
       },
       { path: 'finance', component: FinanceView, meta: { permission: 'finance.requests.view|finance.manage' } },

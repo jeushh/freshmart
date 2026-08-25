@@ -1,6 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
 import { api } from '../../api/http.js'
 import { sessionStore } from '../../stores/session.js'
 import PageHeader from '../../components/common/PageHeader.vue'
@@ -8,15 +7,12 @@ import WorkspaceTable from '../../components/common/WorkspaceTable.vue'
 import { formatMoney } from '../../utils/formatters.js'
 
 const orders = ref([])
-const route = useRoute()
-const receivingMode = computed(() => route.path === '/stock-receiving')
 const suppliers = ref([])
 const products = ref([])
 const restockRequests = ref([])
 const selected = ref(null)
 const filters = ref({ approval_status: '', status: '', supplier_status: '', supplier_id: '', search: '' })
 const actionNotes = ref('')
-const receiving = ref({})
 const error = ref('')
 const message = ref('')
 const responseForm = ref({
@@ -44,22 +40,6 @@ const formTotal = computed(() => form.value.items.reduce(
   (sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_cost || 0),
   0
 ))
-const receivingValid = computed(() => {
-  if (!selected.value) return false
-  const entries = Object.values(receiving.value)
-  return entries.some(item => Number(item.delivered_quantity) > 0) && entries.every(item => {
-    const line = selected.value.items.find(candidate => candidate.id === item.purchase_order_item_id)
-    const delivered = Number(item.delivered_quantity || 0)
-    const damaged = Number(item.damaged_quantity || 0)
-    const rejected = Number(item.rejected_quantity || 0)
-    const accepted = delivered - damaged - rejected
-    return delivered >= 0
-      && damaged >= 0
-      && rejected >= 0
-      && accepted >= 0
-      && accepted <= Number(line?.outstanding_quantity || 0)
-  })
-})
 const canCancelSelected = computed(() => {
   if (!selected.value || selected.value.receivings.length) return false
   const state = selected.value.order.approval_status
@@ -84,17 +64,6 @@ const canRecordResponse = computed(() => {
     && order.approval_status === 'Approved'
     && order.status === 'Ordered'
     && order.supplier_status === 'Sent'
-})
-
-const canReceiveOrder = computed(() => {
-  if (!selected.value) return false
-  if (!sessionStore.can('procurement.stock.receive')) return false
-  const order = selected.value.order
-  if (order.approval_status !== 'Approved') return false
-  if (order.supplier_status === null) {
-    return ['Approved', 'Ordered', 'Partially Received'].includes(order.status)
-  }
-  return order.supplier_status === 'Accepted' && ['Ordered', 'Partially Received'].includes(order.status)
 })
 
 function supplierStatusText(status) {
@@ -173,10 +142,6 @@ async function open(id) {
     error.value = ''
     responseForm.value.open = false
     selected.value = await api.get(`/purchase-orders/${id}`)
-    receiving.value = Object.fromEntries(selected.value.items.map(item => [
-      item.id,
-      { purchase_order_item_id: item.id, delivered_quantity: 0, damaged_quantity: 0, rejected_quantity: 0 }
-    ]))
   } catch (requestError) {
     error.value = requestError.message
   }
@@ -249,51 +214,16 @@ async function submitResponse() {
   }
 }
 
-function acceptedFor(item) {
-  return Math.max(
-    0,
-    Number(item.delivered_quantity || 0)
-      - Number(item.damaged_quantity || 0)
-      - Number(item.rejected_quantity || 0)
-  )
-}
-
-async function receiveStock() {
-  try {
-    error.value = ''
-    message.value = ''
-    const id = selected.value.order.id
-    await api.post(`/purchase-orders/${id}/receive`, {
-      notes: actionNotes.value || null,
-      items: Object.values(receiving.value)
-    })
-    message.value = 'Stock receiving recorded and inventory refreshed.'
-    actionNotes.value = ''
-    await load()
-    await open(id)
-  } catch (requestError) {
-    error.value = requestError.message
-  }
-}
-
-watch(receivingMode, isReceiving => {
-  filters.value.approval_status = isReceiving ? 'Approved' : ''
-  load()
-}, { immediate: true })
+onMounted(load)
 </script>
 
 <template>
-  <PageHeader
-    :title="receivingMode ? 'Stock Receiving' : 'Purchase Orders'"
-    :description="receivingMode
-      ? 'Receive accepted quantities from approved supplier purchase orders.'
-      : 'Create, approve, track, and receive supplier orders.'"
-  />
+  <PageHeader title="Purchase Orders" description="Create, approve, and track supplier orders." />
   <p v-if="error" class="form-error">{{ error }}</p>
   <p v-if="message" class="success-message">{{ message }}</p>
 
   <form
-    v-if="!receivingMode && sessionStore.can('procurement.purchase_orders.manage')"
+    v-if="sessionStore.can('procurement.purchase_orders.manage')"
     class="management-form"
     @submit.prevent="save"
   >
@@ -475,45 +405,5 @@ watch(receivingMode, isReceiving => {
       <template #cell-line_total="{ row }">{{ formatMoney(row.line_total) }}</template>
     </WorkspaceTable>
 
-    <form
-      v-if="canReceiveOrder"
-      class="receiving-form"
-      @submit.prevent="receiveStock"
-    >
-      <h3>Receive stock</h3>
-      <div v-for="item in selected.items" :key="item.id" class="receiving-line">
-        <strong>{{ item.sku }} — {{ item.product_name }}</strong>
-        <label>Outstanding<output>{{ item.outstanding_quantity }}</output></label>
-        <label>Delivered<input v-model.number="receiving[item.id].delivered_quantity" type="number" min="0"></label>
-        <label>Accepted<output>{{ acceptedFor(receiving[item.id]) }}</output></label>
-        <label>Damaged<input v-model.number="receiving[item.id].damaged_quantity" type="number" min="0" :max="receiving[item.id].delivered_quantity"></label>
-        <label>Rejected<input v-model.number="receiving[item.id].rejected_quantity" type="number" min="0" :max="receiving[item.id].delivered_quantity"></label>
-      </div>
-      <p v-if="!receivingValid" class="field-help">
-        Enter at least one valid delivery. Accepted units cannot exceed the outstanding quantity, and damaged plus rejected units cannot exceed delivered units.
-      </p>
-      <button class="primary-button" :disabled="!receivingValid">Record receiving</button>
-    </form>
-
-    <h3 v-if="selected.receivings.length">Receiving history</h3>
-    <article v-for="history in selected.receivings" :key="history.id" class="receiving-history">
-      <h4>Receiving #{{ history.id }} · {{ history.receiving_date }} · {{ history.received_by }}</h4>
-      <p v-if="history.notes">{{ history.notes }}</p>
-      <WorkspaceTable
-        :columns="[
-          { key: 'sku', label: 'SKU' },
-          { key: 'delivered_quantity', label: 'Delivered' },
-          { key: 'accepted_quantity', label: 'Accepted / fulfilled' },
-          { key: 'damaged_quantity', label: 'Damaged' },
-          { key: 'rejected_quantity', label: 'Rejected' },
-          { key: 'unit_cost', label: 'Unit cost' },
-          { key: 'accepted_cost', label: 'Accepted cost' }
-        ]"
-        :rows="history.items"
-      >
-        <template #cell-unit_cost="{ row }">{{ formatMoney(row.unit_cost) }}</template>
-        <template #cell-accepted_cost="{ row }">{{ formatMoney(row.accepted_cost) }}</template>
-      </WorkspaceTable>
-    </article>
   </section>
 </template>
