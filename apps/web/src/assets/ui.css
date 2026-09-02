@@ -347,6 +347,33 @@
   box-shadow: var(--fm-shadow-card);
 }
 
+.ui-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--fm-size-avatar);
+  height: var(--fm-size-avatar);
+  border-radius: var(--fm-radius-pill);
+  background: var(--fm-color-primary-100);
+  color: var(--fm-color-primary-800);
+  font-size: var(--fm-font-size-sm);
+  font-weight: var(--fm-font-weight-bold);
+  line-height: 1;
+}
+
+.ui-avatar--sm {
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: var(--fm-font-size-xs);
+}
+
+.ui-avatar--lg {
+  width: 3.5rem;
+  height: 3.5rem;
+  font-size: var(--fm-font-size-lg);
+}
+
 .ui-kpi-card {
   display: grid;
   gap: var(--fm-space-3);

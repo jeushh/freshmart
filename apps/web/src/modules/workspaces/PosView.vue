@@ -2,13 +2,18 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { api } from '../../api/http.js'
 import PageHeader from '../../components/common/PageHeader.vue'
-import { UiButton } from '../../components/ui/index.js'
+import { UiButton, UiEmptyState, UiSearchInput, UiStatusBadge } from '../../components/ui/index.js'
 import { sessionStore } from '../../stores/session.js'
 import { formatMoney } from '../../utils/formatters.js'
+
+const LOW_STOCK_THRESHOLD = 5
+const PAYMENT_METHODS = ['Cash', 'Card', 'QR']
 
 const products = ref([])
 const cart = ref([])
 const payment = ref('Cash')
+const searchQuery = ref('')
+const activeCategory = ref('All')
 const message = ref('')
 const error = ref('')
 const confirming = ref(false)
@@ -42,6 +47,37 @@ const total = computed(() => sessionStore.state.settings.tax_inclusive
   ? baseTotal.value
   : baseTotal.value + tax.value)
 const subtotal = computed(() => total.value - tax.value)
+
+const categories = computed(() => {
+  const found = new Set(products.value.map(product => product.category).filter(Boolean))
+  return ['All', ...[...found].sort()]
+})
+
+const filteredProducts = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  return products.value.filter(product => {
+    const matchesCategory = activeCategory.value === 'All' || product.category === activeCategory.value
+    if (!matchesCategory) return false
+    if (!query) return true
+    return product.name.toLowerCase().includes(query) || product.sku.toLowerCase().includes(query)
+  })
+})
+
+function stockTone(product) {
+  if (product.stock_quantity < 1) return 'danger'
+  if (product.stock_quantity <= LOW_STOCK_THRESHOLD) return 'warning'
+  return 'success'
+}
+
+function stockLabel(product) {
+  if (product.stock_quantity < 1) return 'Out of stock'
+  if (product.stock_quantity <= LOW_STOCK_THRESHOLD) return `Low stock · ${product.stock_quantity} left`
+  return `${product.stock_quantity} in stock`
+}
+
+function cartQuantityFor(productId) {
+  return cart.value.find(item => item.id === productId)?.quantity || 0
+}
 
 async function load() {
   refreshingProducts.value = true
@@ -396,47 +432,126 @@ onMounted(load)
       </UiButton>
     </div>
     <p v-if="message" class="success-message">{{ message }}</p>
-    <div class="pos-layout">
-      <section>
-        <div class="product-grid" :aria-busy="refreshingProducts || undefined">
-          <button v-for="product in products" :key="product.id" class="product-card" :disabled="!productsReady || product.stock_quantity < 1" @click="add(product)">
-            <strong>{{ product.emoji }} {{ product.name }}</strong>
-            <span>{{ formatMoney(product.price) }}</span>
-            <small>{{ product.stock_quantity }} in stock</small>
+
+    <div class="pos-workspace">
+      <section class="pos-catalog" aria-label="Product catalog">
+        <div class="pos-catalog__toolbar">
+          <UiSearchInput
+            v-model="searchQuery"
+            class="pos-catalog__search"
+            label="Search products"
+            placeholder="Search by name or SKU…"
+          />
+          <div class="pos-categories" role="tablist" aria-label="Filter by category">
+            <button
+              v-for="category in categories"
+              :key="category"
+              type="button"
+              role="tab"
+              class="pos-category-pill"
+              :class="{ 'pos-category-pill--active': activeCategory === category }"
+              :aria-selected="activeCategory === category"
+              @click="activeCategory = category"
+            >
+              {{ category }}
+            </button>
+          </div>
+        </div>
+
+        <UiEmptyState
+          v-if="!filteredProducts.length"
+          title="No products match"
+          description="Try a different search term or category."
+        />
+        <div v-else class="pos-product-grid" :aria-busy="refreshingProducts || undefined">
+          <button
+            v-for="product in filteredProducts"
+            :key="product.id"
+            type="button"
+            class="pos-product-card"
+            :disabled="!productsReady || product.stock_quantity < 1"
+            @click="add(product)"
+          >
+            <span class="pos-product-card__media" aria-hidden="true">{{ product.emoji || '🛒' }}</span>
+            <span class="pos-product-card__name">{{ product.name }}</span>
+            <span class="pos-product-card__price">{{ formatMoney(product.price) }}</span>
+            <UiStatusBadge class="pos-product-card__stock" :status="stockLabel(product)" :tone="stockTone(product)" />
+            <span v-if="cartQuantityFor(product.id)" class="pos-product-card__in-cart">{{ cartQuantityFor(product.id) }} in cart</span>
           </button>
         </div>
       </section>
-      <aside class="cart-card">
-        <h2>Current sale</h2>
-        <div v-for="item in cart" :key="item.id" class="cart-line">
-          <span>{{ item.name }} × {{ item.quantity }}</span>
-          <span class="cart-line__actions">
-            <strong>{{ formatMoney(item.price * item.quantity) }}</strong>
-            <button
-              type="button"
-              class="icon-button cart-line__decrement"
-              :aria-label="`Remove one ${item.name}`"
-              :title="`Remove one ${item.name}`"
-              @click="decrement(item)"
-            >
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-              </svg>
-            </button>
-          </span>
+
+      <aside class="pos-cart" aria-label="Current sale">
+        <div class="pos-cart__header">
+          <h2>Current sale</h2>
+          <span v-if="itemCount" class="ui-badge ui-badge--info">{{ itemCount }} {{ itemCount === 1 ? 'item' : 'items' }}</span>
         </div>
-        <p v-if="!cart.length">Cart is empty.</p>
-        <div class="sale-totals">
-          <div><span>Subtotal</span><strong>{{ formatMoney(subtotal) }}</strong></div>
-          <div>
+
+        <div class="pos-cart__lines">
+          <UiEmptyState v-if="!cart.length" title="Cart is empty" description="Select a product to start this sale." />
+          <div v-for="item in cart" :key="item.id" class="pos-cart-line">
+            <div class="pos-cart-line__info">
+              <strong>{{ item.name }}</strong>
+              <small>{{ formatMoney(item.price) }} each</small>
+            </div>
+            <div class="pos-cart-line__controls">
+              <button
+                type="button"
+                class="pos-qty-button"
+                :aria-label="`Remove one ${item.name}`"
+                @click="decrement(item)"
+              >−</button>
+              <span class="pos-qty-value">{{ item.quantity }}</span>
+              <button
+                type="button"
+                class="pos-qty-button"
+                :aria-label="`Add one more ${item.name}`"
+                :disabled="item.quantity >= item.stock_quantity"
+                @click="add(item)"
+              >+</button>
+            </div>
+            <strong class="pos-cart-line__total">{{ formatMoney(item.price * item.quantity) }}</strong>
+          </div>
+        </div>
+
+        <div class="pos-cart__summary">
+          <div class="pos-cart__summary-row">
+            <span>Subtotal</span><strong>{{ formatMoney(subtotal) }}</strong>
+          </div>
+          <div class="pos-cart__summary-row">
             <span>Tax ({{ sessionStore.state.settings.tax_rate }}%{{ sessionStore.state.settings.tax_inclusive ? ', included' : '' }})</span>
             <strong>{{ formatMoney(tax) }}</strong>
           </div>
-          <div class="cart-total"><span>Total</span><strong>{{ formatMoney(total) }}</strong></div>
+          <div class="pos-cart__summary-row pos-cart__summary-row--total">
+            <span>Total</span><strong>{{ formatMoney(total) }}</strong>
+          </div>
         </div>
-        <select v-model="payment"><option>Cash</option><option>Card</option><option>QR</option></select>
-        <UiButton ref="checkoutButton" class="checkout-button" :disabled="!cart.length || !productsReady" @click="openConfirmation">
-          Review sale
+
+        <fieldset class="pos-payment">
+          <legend>Payment method</legend>
+          <div class="pos-payment__options">
+            <button
+              v-for="method in PAYMENT_METHODS"
+              :key="method"
+              type="button"
+              class="pos-payment-option"
+              :class="{ 'pos-payment-option--active': payment === method }"
+              :aria-pressed="payment === method"
+              @click="payment = method"
+            >
+              {{ method }}
+            </button>
+          </div>
+        </fieldset>
+
+        <UiButton
+          ref="checkoutButton"
+          class="pos-checkout-button"
+          size="lg"
+          :disabled="!cart.length || !productsReady"
+          @click="openConfirmation"
+        >
+          Review sale · {{ formatMoney(total) }}
         </UiButton>
       </aside>
     </div>
@@ -567,26 +682,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.cart-line__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.cart-line .cart-line__decrement {
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  margin-top: 0;
-  padding: 7px;
-  border: 1px solid #dce4de;
-}
-
-.cart-line__decrement svg {
-  width: 18px;
-  height: 18px;
-}
-
 .receipt-page {
   min-width: 0;
 }
@@ -762,9 +857,310 @@ onMounted(load)
   overflow-wrap: anywhere;
 }
 
-.checkout-button {
+.pos-workspace {
+  display: grid;
+  grid-template-columns: 1fr 22rem;
+  align-items: start;
+  gap: var(--fm-space-6);
+}
+
+.pos-catalog {
+  display: grid;
+  gap: var(--fm-space-4);
+  min-width: 0;
+}
+
+.pos-catalog__toolbar {
+  display: grid;
+  gap: var(--fm-space-3);
+}
+
+.pos-catalog__search {
+  max-width: 24rem;
+}
+
+.pos-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fm-space-2);
+}
+
+.pos-category-pill {
+  min-height: var(--fm-control-height-sm);
+  padding: 0 var(--fm-space-4);
+  border: var(--fm-border-width) solid var(--fm-color-border);
+  border-radius: var(--fm-radius-pill);
+  background: var(--fm-color-surface);
+  color: var(--fm-color-text-secondary);
+  font-size: var(--fm-font-size-sm);
+  font-weight: var(--fm-font-weight-semibold);
+  cursor: pointer;
+  transition: background-color var(--fm-transition-fast), color var(--fm-transition-fast), border-color var(--fm-transition-fast);
+}
+
+.pos-category-pill:hover {
+  background: var(--fm-color-slate-100);
+}
+
+.pos-category-pill--active {
+  border-color: var(--fm-color-primary-700);
+  background: var(--fm-color-primary-700);
+  color: var(--fm-color-white);
+}
+
+.pos-category-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--fm-focus-ring);
+}
+
+.pos-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--fm-space-4);
+}
+
+.pos-product-card {
+  position: relative;
+  display: grid;
+  gap: var(--fm-space-2);
+  min-height: 9.5rem;
+  padding: var(--fm-space-4);
+  border: var(--fm-border-width) solid var(--fm-color-border);
+  border-radius: var(--fm-radius-card);
+  background: var(--fm-color-surface);
+  box-shadow: var(--fm-shadow-card);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--fm-transition-fast), border-color var(--fm-transition-fast), box-shadow var(--fm-transition-fast);
+}
+
+.pos-product-card:hover:not(:disabled) {
+  border-color: var(--fm-color-primary-500);
+  transform: translateY(-2px);
+  box-shadow: var(--fm-shadow-menu);
+}
+
+.pos-product-card:focus-visible {
+  outline: none;
+  box-shadow: var(--fm-focus-ring);
+}
+
+.pos-product-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.pos-product-card__media {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-color-primary-50);
+  font-size: var(--fm-font-size-xl);
+}
+
+.pos-product-card__name {
+  color: var(--fm-color-text);
+  font-weight: var(--fm-font-weight-semibold);
+  line-height: var(--fm-line-height-tight);
+}
+
+.pos-product-card__price {
+  color: var(--fm-color-primary-700);
+  font-weight: var(--fm-font-weight-bold);
+}
+
+.pos-product-card__stock {
+  justify-self: start;
+}
+
+.pos-product-card__in-cart {
+  position: absolute;
+  top: var(--fm-space-3);
+  right: var(--fm-space-3);
+  padding: var(--fm-space-1) var(--fm-space-2);
+  border-radius: var(--fm-radius-pill);
+  background: var(--fm-color-primary-700);
+  color: var(--fm-color-white);
+  font-size: var(--fm-font-size-xs);
+  font-weight: var(--fm-font-weight-bold);
+}
+
+.pos-cart {
+  position: sticky;
+  top: var(--fm-space-6);
+  display: grid;
+  gap: var(--fm-space-4);
+  padding: var(--fm-space-5);
+  border: var(--fm-border-width) solid var(--fm-color-border);
+  border-radius: var(--fm-radius-panel);
+  background: var(--fm-color-surface);
+  box-shadow: var(--fm-shadow-card);
+}
+
+.pos-cart__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fm-space-3);
+}
+
+.pos-cart__header h2 {
+  margin: 0;
+  font-size: var(--fm-font-size-lg);
+}
+
+.pos-cart__lines {
+  display: grid;
+  gap: var(--fm-space-1);
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.pos-cart-line {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--fm-space-3);
+  padding-block: var(--fm-space-3);
+  border-bottom: var(--fm-border-width) solid var(--fm-color-border);
+}
+
+.pos-cart-line__info {
+  display: grid;
+  gap: var(--fm-space-1);
+  min-width: 0;
+}
+
+.pos-cart-line__info small {
+  color: var(--fm-color-text-muted);
+}
+
+.pos-cart-line__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--fm-space-2);
+}
+
+.pos-qty-button {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: var(--fm-border-width) solid var(--fm-color-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-color-surface);
+  color: var(--fm-color-text);
+  font-weight: var(--fm-font-weight-bold);
+  cursor: pointer;
+}
+
+.pos-qty-button:hover:not(:disabled) {
+  background: var(--fm-color-slate-100);
+}
+
+.pos-qty-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pos-qty-value {
+  min-width: 1.25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-cart-line__total {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-cart__summary {
+  display: grid;
+  gap: var(--fm-space-2);
+  padding-top: var(--fm-space-3);
+  border-top: var(--fm-border-width) solid var(--fm-color-border);
+}
+
+.pos-cart__summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--fm-space-3);
+  color: var(--fm-color-text-secondary);
+}
+
+.pos-cart__summary-row--total {
+  padding-top: var(--fm-space-2);
+  border-top: var(--fm-border-width) solid var(--fm-color-border);
+  color: var(--fm-color-text);
+  font-size: var(--fm-font-size-lg);
+  font-weight: var(--fm-font-weight-bold);
+}
+
+.pos-payment {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pos-payment legend {
+  margin-bottom: var(--fm-space-2);
+  padding: 0;
+  color: var(--fm-color-text);
+  font-size: var(--fm-font-size-sm);
+  font-weight: var(--fm-font-weight-semibold);
+}
+
+.pos-payment__options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--fm-space-2);
+}
+
+.pos-payment-option {
+  min-height: var(--fm-control-height-md);
+  border: var(--fm-border-width) solid var(--fm-color-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-color-surface);
+  color: var(--fm-color-text);
+  font-weight: var(--fm-font-weight-semibold);
+  cursor: pointer;
+}
+
+.pos-payment-option:hover {
+  background: var(--fm-color-slate-100);
+}
+
+.pos-payment-option--active {
+  border-color: var(--fm-color-primary-700);
+  background: var(--fm-color-primary-700);
+  color: var(--fm-color-white);
+}
+
+.pos-payment-option:focus-visible {
+  outline: none;
+  box-shadow: var(--fm-focus-ring);
+}
+
+.pos-checkout-button {
   width: 100%;
-  margin-top: var(--fm-space-3);
+}
+
+@media (max-width: 64rem) {
+  .pos-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-cart {
+    position: static;
+  }
+}
+
+@media (max-width: 30rem) {
+  .pos-payment__options {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .checkout-dialog-backdrop {
