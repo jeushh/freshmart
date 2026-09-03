@@ -1,7 +1,16 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../../api/http.js'
-import PageHeader from '../../components/common/PageHeader.vue'
+import {
+  UiButton,
+  UiErrorState,
+  UiInput,
+  UiKpiCard,
+  UiLoadingSkeleton,
+  UiPageHeader,
+  UiSelect,
+  UiTableShell
+} from '../../components/ui/index.js'
 import { sessionStore } from '../../stores/session.js'
 import { formatDateTime, formatMoney, formatNumber } from '../../utils/formatters.js'
 
@@ -64,7 +73,9 @@ const summaryEntries = computed(() => Object.entries(report.value?.summary || {}
 
 function params() {
   return Object.fromEntries(
-    Object.entries(filters.value).filter(([, value]) => value !== '' && value !== null)
+    Object.entries(filters.value)
+      .map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value])
+      .filter(([, value]) => value !== '' && value !== null)
   )
 }
 
@@ -142,48 +153,83 @@ onMounted(() => {
 
 <template>
   <div class="report-page">
-    <PageHeader title="Reports" description="Permission-aware operational and financial reporting.">
-      <button class="secondary-button print-hidden" :disabled="!report" @click="window.print()">Print report</button>
-      <button
-        v-if="sessionStore.can('reports.export')"
-        class="primary-button print-hidden"
-        :disabled="!report || exporting"
-        @click="exportCsv"
-      >{{ exporting ? 'Exporting…' : 'Export CSV' }}</button>
-    </PageHeader>
+    <UiPageHeader title="Reports" description="Permission-aware operational and financial reporting.">
+      <template #actions>
+        <UiButton
+          class="print-hidden"
+          variant="secondary"
+          :disabled="!report"
+          @click="window.print()"
+        >Print report</UiButton>
+        <UiButton
+          v-if="sessionStore.can('reports.export')"
+          class="print-hidden"
+          :disabled="!report || exporting"
+          :loading="exporting"
+          loading-label="Exporting CSV"
+          @click="exportCsv"
+        >Export CSV</UiButton>
+      </template>
+    </UiPageHeader>
 
-    <nav class="report-tabs print-hidden" aria-label="Report type">
+    <nav class="report-type-switcher print-hidden" aria-label="Report type">
       <button
         v-for="item in available"
         :key="item.key"
-        :class="{ active: active === item.key }"
+        type="button"
+        class="report-type-switcher__item"
+        :class="{ 'report-type-switcher__item--active': active === item.key }"
         @click="selectReport(item.key)"
       >{{ item.label }}</button>
     </nav>
 
-    <form class="report-filters print-hidden" @submit.prevent="load(1)">
-      <label>From<input v-model="filters.from" type="date" required></label>
-      <label>To<input v-model="filters.to" type="date" :min="filters.from" required></label>
-      <label v-for="[key, title, options] in filterOptions[active] || []" :key="key">
-        {{ title }}
-        <select v-model="filters[key]">
-          <option v-for="option in options" :key="option" :value="option">
-            {{ option ? label(option) : 'All' }}
-          </option>
-        </select>
-      </label>
-      <label v-for="[key, title] in textFilters" :key="key">
-        {{ title }}<input v-model.trim="filters[key]" type="search" maxlength="100">
-      </label>
-      <label>Rows<select v-model.number="filters.per_page"><option>25</option><option>50</option><option>100</option></select></label>
-      <button class="primary-button">Run report</button>
+    <form class="filter-form print-hidden" @submit.prevent="load(1)">
+      <UiInput v-model="filters.from" type="date" label="From" required />
+      <UiInput v-model="filters.to" type="date" label="To" :min="filters.from" required />
+      <UiSelect
+        v-for="[key, title, options] in filterOptions[active] || []"
+        :key="key"
+        :model-value="filters[key] ?? ''"
+        :label="title"
+        size="sm"
+        @update:model-value="value => filters[key] = value"
+      >
+        <option v-for="option in options" :key="option" :value="option">
+          {{ option ? label(option) : 'All' }}
+        </option>
+      </UiSelect>
+      <UiInput
+        v-for="[key, title] in textFilters"
+        :key="key"
+        :model-value="filters[key] ?? ''"
+        type="search"
+        maxlength="100"
+        :label="title"
+        size="sm"
+        @update:model-value="value => filters[key] = value"
+      />
+      <UiSelect
+        :model-value="String(filters.per_page)"
+        label="Rows"
+        size="sm"
+        @update:model-value="value => filters.per_page = Number(value)"
+      >
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </UiSelect>
+      <UiButton type="submit">Run report</UiButton>
     </form>
 
-    <div v-if="error" class="form-error error-action" role="alert">
-      <span>{{ error }}</span>
-      <button class="secondary-button" @click="load(filters.page)">Retry</button>
+    <UiErrorState
+      v-if="error"
+      :message="error"
+      retry-label="Retry"
+      @retry="() => load(filters.page)"
+    />
+    <div v-if="loading" class="ui-state" aria-live="polite">
+      <UiLoadingSkeleton label="Loading report" />
     </div>
-    <div v-if="loading" class="loading-panel" aria-live="polite">Loading report…</div>
 
     <template v-else-if="report">
       <div class="print-report-heading">
@@ -207,36 +253,41 @@ onMounted(() => {
       </div>
 
       <section class="metrics-grid" aria-label="Report summary">
-        <article v-for="[key, value] in summaryEntries" :key="key" class="metric-card">
-          <span>{{ label(key) }}</span>
-          <strong>{{ summaryValue(key, value) }}</strong>
-        </article>
+        <UiKpiCard
+          v-for="[key, value] in summaryEntries"
+          :key="key"
+          class="metric-card"
+          :label="label(key)"
+          :value="summaryValue(key, value)"
+        />
       </section>
 
-      <div class="table-panel report-table">
-        <div class="table-scroll">
-          <table>
-            <thead><tr><th v-for="column in report.columns" :key="column.key">{{ column.label }}</th></tr></thead>
-            <tbody>
-              <tr v-for="(row, index) in report.records.data" :key="row.id || row.source_id || index">
-                <td v-for="column in report.columns" :key="column.key">
-                  {{ displayValue(column, row[column.key]) }}
-                </td>
-              </tr>
-              <tr v-if="!report.records.data.length">
-                <td class="empty-cell" :colspan="report.columns.length">No records match these filters.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-if="report.records.last_page > 1" class="pagination print-hidden">
-          <span>Page {{ report.records.current_page }} of {{ report.records.last_page }}</span>
-          <div>
-            <button :disabled="report.records.current_page === 1" @click="load(report.records.current_page - 1)">Previous</button>
-            <button :disabled="report.records.current_page === report.records.last_page" @click="load(report.records.current_page + 1)">Next</button>
+      <UiTableShell
+        class="report-table"
+        :empty="!report.records.data.length"
+        empty-title="No records found"
+        empty-description="No records match these filters."
+      >
+        <table>
+          <thead><tr><th v-for="column in report.columns" :key="column.key">{{ column.label }}</th></tr></thead>
+          <tbody>
+            <tr v-for="(row, index) in report.records.data" :key="row.id || row.source_id || index">
+              <td v-for="column in report.columns" :key="column.key">
+                {{ displayValue(column, row[column.key]) }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <template v-if="report.records.last_page > 1" #footer>
+          <div class="pagination print-hidden">
+            <span>Page {{ report.records.current_page }} of {{ report.records.last_page }}</span>
+            <div>
+              <UiButton size="sm" variant="secondary" :disabled="report.records.current_page === 1" @click="load(report.records.current_page - 1)">Previous</UiButton>
+              <UiButton size="sm" variant="secondary" :disabled="report.records.current_page === report.records.last_page" @click="load(report.records.current_page + 1)">Next</UiButton>
+            </div>
           </div>
-        </div>
-      </div>
+        </template>
+      </UiTableShell>
 
       <ul v-if="report.notes.length" class="report-notes">
         <li v-for="note in report.notes" :key="note">{{ note }}</li>
@@ -244,3 +295,41 @@ onMounted(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+.filter-form {
+  display: flex;
+  gap: var(--fm-space-3);
+  align-items: end;
+  flex-wrap: wrap;
+  margin-bottom: var(--fm-space-4);
+}
+.report-type-switcher {
+  display: flex;
+  gap: var(--fm-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--fm-space-4);
+}
+.report-type-switcher__item {
+  border: var(--fm-border-width) solid var(--fm-color-border);
+  background: var(--fm-color-surface);
+  color: var(--fm-color-text);
+  border-radius: var(--fm-radius-pill);
+  padding: var(--fm-space-2) var(--fm-space-4);
+  font-size: var(--fm-font-size-sm);
+  font-weight: var(--fm-font-weight-semibold);
+  cursor: pointer;
+}
+.report-type-switcher__item--active {
+  background: var(--fm-color-primary-600);
+  color: var(--fm-color-white);
+  border-color: var(--fm-color-primary-600);
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fm-space-4);
+  flex-wrap: wrap;
+}
+</style>
