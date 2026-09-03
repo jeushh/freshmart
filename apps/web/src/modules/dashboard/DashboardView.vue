@@ -30,6 +30,7 @@ const salesFinanceMetricKeys = [
   'today_revenue',
   'month_revenue',
   'month_expenses',
+  'month_supplier_payments',
   'month_refunds',
   'net_movement',
   'average_transaction',
@@ -66,6 +67,7 @@ const metricPermissions = {
   today_revenue: 'finance.manage|reports.finance.view',
   month_revenue: 'finance.manage|reports.finance.view',
   month_expenses: 'finance.manage|reports.finance.view',
+  month_supplier_payments: 'finance.manage|reports.finance.view',
   net_movement: 'finance.manage|reports.finance.view',
   accounts_payable: 'finance.manage|reports.finance.view',
   submitted_purchase_orders: 'restock.approve|procurement.purchase_orders.approve|reports.procurement.view',
@@ -184,7 +186,7 @@ const listSectionDefinitions = [
 ]
 
 const quickActionDefinitions = [
-  ['Manage users', '/admin', 'system.users.manage'],
+  ['Manage users', '/admin', 'system.users.manage|system.roles.manage'],
   ['Review finance requests', '/finance/requests', 'finance.requests.approve'],
   ['Review restock requests', '/restock-requests', 'restock.approve'],
   ['Receive stock', '/stock-receiving', 'procurement.stock.receive'],

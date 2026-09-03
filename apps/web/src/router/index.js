@@ -65,7 +65,7 @@ const routes = [
       {
         path: 'admin',
         component: AdminView,
-        meta: { permission: 'system.users.manage|system.audit.view' }
+        meta: { permission: 'system.users.manage|system.roles.manage|system.audit.view' }
       },
       { path: 'roles', component: RolesView, meta: { permission: 'system.roles.manage' } },
       { path: 'settings', component: SettingsView, meta: { permission: 'system.settings.manage' } },

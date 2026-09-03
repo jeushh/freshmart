@@ -193,7 +193,7 @@ export const navigationGroups = [
       {
         to: '/admin',
         label: 'Administration',
-        permission: 'system.users.manage|system.audit.view',
+        permission: 'system.users.manage|system.roles.manage|system.audit.view',
         icon: icon(
           'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-6 9a6 6 0 0 1 12 0',
           'M17 10v6m-3-3h6'
