@@ -1,13 +1,21 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { api } from '../../api/http.js'
-import PageHeader from '../../components/common/PageHeader.vue'
+import {
+  UiButton,
+  UiInput,
+  UiPageHeader,
+  UiSectionCard,
+  UiSelect,
+  UiToggle
+} from '../../components/ui/index.js'
 import { sessionStore } from '../../stores/session.js'
 
 const groups = ref({})
 const settings = ref({})
 const error = ref('')
 const message = ref('')
+const saving = ref(false)
 
 async function load() {
   try {
@@ -24,15 +32,18 @@ async function load() {
 }
 
 async function save() {
+  saving.value = true
+  error.value = ''
+  message.value = ''
   try {
-    error.value = ''
-    message.value = ''
     const data = await api.put('/settings', { settings: settings.value })
     groups.value = data.groups
     sessionStore.updateSettings(settings.value)
     message.value = 'System settings saved.'
   } catch (requestError) {
     error.value = requestError.message
+  } finally {
+    saving.value = false
   }
 }
 
@@ -45,42 +56,85 @@ watch(() => settings.value.currency_code, code => {
 </script>
 
 <template>
-  <PageHeader title="System Settings" description="Manage approved business and application settings." />
+  <UiPageHeader title="System Settings" description="Manage approved business and application settings." />
   <p v-if="error" class="form-error">{{ error }}</p>
   <p v-if="message" class="success-message">{{ message }}</p>
-  <div class="notice-panel settings-notice">
+
+  <div class="settings-policy">
     <strong>Configuration policy</strong>
     <p>Currency and tax changes apply to new transactions. Historical sales retain the tax snapshots recorded when they were finalized.</p>
     <p>Database backups and restores are intentionally available only through the protected server command line.</p>
   </div>
 
   <form class="settings-form" @submit.prevent="save">
-    <fieldset v-for="(fields, group) in groups" :key="group">
-      <legend>{{ group }}</legend>
-      <label v-for="field in fields" :key="field.key" :class="{ 'check-field': field.type === 'boolean' }">
-        <template v-if="field.type === 'boolean'">
-          <input v-model="settings[field.key]" type="checkbox">
-          <span>{{ field.label }}</span>
-        </template>
-        <template v-else>
-          {{ field.label }}
-          <textarea
-            v-if="field.type === 'textarea'"
+    <UiSectionCard v-for="(fields, group) in groups" :key="group" :title="group">
+      <div class="settings-fields">
+        <template v-for="field in fields" :key="field.key">
+          <div v-if="field.type === 'boolean'" class="ui-field">
+            <span class="ui-field__label settings-fields__hidden-label" aria-hidden="true">&nbsp;</span>
+            <UiToggle
+              v-model="settings[field.key]"
+              :label="field.label"
+            />
+          </div>
+          <UiSelect
+            v-else-if="field.type === 'select'"
             v-model="settings[field.key]"
-            rows="3"
-          />
-          <select v-else-if="field.type === 'select'" v-model="settings[field.key]">
+            :label="field.label"
+          >
             <option v-for="option in field.options" :key="option" :value="option">{{ option }}</option>
-          </select>
-          <input
+          </UiSelect>
+          <label v-else-if="field.type === 'textarea'" class="ui-field settings-fields__span">
+            <span class="ui-field__label">{{ field.label }}</span>
+            <textarea v-model="settings[field.key]" class="ui-field-control" rows="3"></textarea>
+          </label>
+          <UiInput
             v-else
             v-model="settings[field.key]"
+            :label="field.label"
             :type="field.type"
             :step="field.type === 'number' ? '.01' : undefined"
-          >
+          />
         </template>
-      </label>
-    </fieldset>
-    <button class="primary-button">Save settings</button>
+      </div>
+    </UiSectionCard>
+    <UiButton type="submit" :loading="saving" loading-label="Saving settings">Save settings</UiButton>
   </form>
 </template>
+
+<style scoped>
+.settings-policy {
+  border: var(--fm-border-width) solid var(--fm-color-info-200);
+  background: var(--fm-color-info-50);
+  color: var(--fm-color-info-700);
+  border-radius: var(--fm-radius-card);
+  padding: var(--fm-space-4) var(--fm-space-5);
+  margin-bottom: var(--fm-space-4);
+}
+.settings-policy strong {
+  display: block;
+  margin-bottom: var(--fm-space-2);
+}
+.settings-policy p {
+  margin: 0;
+}
+.settings-policy p + p {
+  margin-top: var(--fm-space-2);
+}
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-4);
+}
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--fm-space-5);
+}
+.settings-fields__span {
+  grid-column: 1 / -1;
+}
+.settings-fields__hidden-label {
+  visibility: hidden;
+}
+</style>
