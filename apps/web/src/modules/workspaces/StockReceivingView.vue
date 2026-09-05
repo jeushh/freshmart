@@ -2,9 +2,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../../api/http.js'
 import { sessionStore } from '../../stores/session.js'
-import PageHeader from '../../components/common/PageHeader.vue'
-import WorkspaceTable from '../../components/common/WorkspaceTable.vue'
 import { formatMoney } from '../../utils/formatters.js'
+import {
+  UiButton,
+  UiConfirmDialog,
+  UiInput,
+  UiPageHeader,
+  UiSectionCard,
+  UiStatusBadge,
+  UiTableShell
+} from '../../components/ui/index.js'
 
 const orders = ref([])
 const selected = ref(null)
@@ -15,6 +22,8 @@ const error = ref('')
 const message = ref('')
 const listLoading = ref(false)
 const detailLoading = ref(false)
+const confirmOpen = ref(false)
+const submitting = ref(false)
 
 const eligibleOrders = computed(() => orders.value.filter(isEligibleForReceiving))
 const receivingValid = computed(() => {
@@ -32,6 +41,20 @@ const receivingValid = computed(() => {
       && accepted >= 0
       && accepted <= Number(line?.outstanding_quantity || 0)
   })
+})
+const pendingLines = computed(() => {
+  if (!selected.value) return []
+  return selected.value.items
+    .map(item => ({ item, entry: receiving.value[item.id] }))
+    .filter(({ entry }) => entry && Number(entry.delivered_quantity) > 0)
+    .map(({ item, entry }) => ({
+      id: item.id,
+      sku: item.sku,
+      delivered: Number(entry.delivered_quantity),
+      accepted: acceptedFor(entry),
+      damaged: Number(entry.damaged_quantity || 0),
+      rejected: Number(entry.rejected_quantity || 0)
+    }))
 })
 
 function isEligibleForReceiving(order) {
@@ -88,20 +111,34 @@ async function open(id) {
   }
 }
 
-async function receiveStock() {
+function startReceive() {
+  if (!receivingValid.value) return
+  confirmOpen.value = true
+}
+
+function cancelReceive() {
+  confirmOpen.value = false
+}
+
+async function confirmReceive() {
+  if (!selected.value) return
+  submitting.value = true
+  error.value = ''
+  message.value = ''
   try {
-    error.value = ''
-    message.value = ''
     const id = selected.value.order.id
     await api.post(`/purchase-orders/${id}/receive`, {
       notes: receivingNotes.value || null,
       items: Object.values(receiving.value)
     })
     message.value = 'Stock receiving recorded and inventory refreshed.'
+    cancelReceive()
     await open(id)
     await load()
   } catch (requestError) {
     error.value = requestError.message
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -109,104 +146,252 @@ onMounted(load)
 </script>
 
 <template>
-  <PageHeader title="Stock Receiving" description="Receive accepted quantities from approved supplier purchase orders." />
-  <p v-if="error" class="form-error">{{ error }}</p>
-  <p v-if="message" class="success-message">{{ message }}</p>
+  <UiPageHeader title="Stock Receiving" description="Receive accepted quantities from approved supplier purchase orders." />
 
-  <form class="filter-bar" @submit.prevent="load">
-    <input v-model.trim="filters.search" placeholder="PO number or supplier">
-    <button class="secondary-button" :disabled="listLoading">Apply filters</button>
-  </form>
-
-  <p v-if="listLoading" class="field-help">Loading purchase orders eligible for receiving…</p>
-  <WorkspaceTable
-    v-else
-    :columns="[
-      { key: 'po_number', label: 'PO number' },
-      { key: 'supplier_name', label: 'Supplier' },
-      { key: 'approval_status', label: 'Approval' },
-      { key: 'supplier_status', label: 'Supplier status' },
-      { key: 'status', label: 'Status' },
-      { key: 'total_fulfilled', label: 'Fulfillment' },
-      { key: 'expected_delivery_date', label: 'Expected' }
-    ]"
-    :rows="eligibleOrders"
-    empty="No purchase orders are currently eligible for receiving."
+  <UiTableShell
+    title="Purchase orders eligible for receiving"
+    :loading="listLoading"
+    :error="error"
+    :empty="!listLoading && !error && !eligibleOrders.length"
+    empty-title="No purchase orders are currently eligible for receiving"
+    empty-description="Approved purchase orders will appear here once they're ready to receive."
+    @retry="load"
   >
-    <template #cell-approval_status="{ row }"><span class="status-badge">{{ row.approval_status }}</span></template>
-    <template #cell-supplier_status="{ row }"><span class="status-badge">{{ row.supplier_status || 'Historical — not tracked' }}</span></template>
-    <template #cell-status="{ row }"><span class="status-badge">{{ row.status }}</span></template>
-    <template #cell-total_fulfilled="{ row }">{{ row.total_fulfilled }} / {{ row.total_ordered }}</template>
-    <template #actions="{ row }"><button @click="open(row.id)">Receive</button></template>
-  </WorkspaceTable>
+    <template #toolbar>
+      <form class="filter-form" @submit.prevent="load">
+        <UiInput v-model.trim="filters.search" label="Search" size="sm" placeholder="PO number or supplier" />
+        <UiButton type="submit" variant="secondary" size="sm">Apply filters</UiButton>
+      </form>
+    </template>
+    <table>
+      <thead>
+        <tr>
+          <th>PO number</th>
+          <th>Supplier</th>
+          <th>Approval</th>
+          <th>Supplier status</th>
+          <th>Status</th>
+          <th>Fulfillment</th>
+          <th>Expected</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="order in eligibleOrders" :key="order.id">
+          <td>{{ order.po_number }}</td>
+          <td>{{ order.supplier_name }}</td>
+          <td><UiStatusBadge :status="order.approval_status" /></td>
+          <td>
+            <UiStatusBadge v-if="order.supplier_status" :status="order.supplier_status" />
+            <span v-else class="field-help">Historical — not tracked</span>
+          </td>
+          <td><UiStatusBadge :status="order.status" /></td>
+          <td>{{ order.total_fulfilled }} / {{ order.total_ordered }}</td>
+          <td>{{ order.expected_delivery_date }}</td>
+          <td><UiButton size="sm" @click="open(order.id)">Receive</UiButton></td>
+        </tr>
+      </tbody>
+    </table>
+  </UiTableShell>
 
   <p v-if="detailLoading" class="field-help">Loading purchase order details…</p>
-  <section v-if="selected && !detailLoading" class="detail-panel">
-    <div class="detail-heading">
-      <div>
-        <h2>{{ selected.order.po_number }}</h2>
-        <p>{{ selected.order.supplier_name }} · PO status {{ selected.order.status }}</p>
-        <p class="field-help">
-          Approval: <strong>{{ selected.order.approval_status }}</strong>
-          · Supplier: <strong>{{ selected.order.supplier_status || 'Historical — not tracked' }}</strong>
-        </p>
-      </div>
-    </div>
 
-    <WorkspaceTable
-      :columns="[
-        { key: 'sku', label: 'SKU' },
-        { key: 'product_name', label: 'Product' },
-        { key: 'quantity_ordered', label: 'Ordered' },
-        { key: 'fulfilled_quantity', label: 'Already received' },
-        { key: 'outstanding_quantity', label: 'Outstanding' },
-        { key: 'current_stock', label: 'Current stock' },
-        { key: 'unit_cost', label: 'Unit cost' }
-      ]"
-      :rows="selected.items"
-    >
-      <template #cell-unit_cost="{ row }">{{ formatMoney(row.unit_cost) }}</template>
-    </WorkspaceTable>
-
-    <form class="receiving-form" @submit.prevent="receiveStock">
-      <h3>Receive stock</h3>
-      <div v-for="item in selected.items" :key="item.id" class="receiving-line">
-        <strong>{{ item.sku }} — {{ item.product_name }}</strong>
-        <label>Outstanding<output>{{ item.outstanding_quantity }}</output></label>
-        <label>Delivered<input v-model.number="receiving[item.id].delivered_quantity" type="number" min="0"></label>
-        <label>Accepted<output>{{ acceptedFor(receiving[item.id]) }}</output></label>
-        <label>Damaged<input v-model.number="receiving[item.id].damaged_quantity" type="number" min="0" :max="receiving[item.id].delivered_quantity"></label>
-        <label>Rejected<input v-model.number="receiving[item.id].rejected_quantity" type="number" min="0" :max="receiving[item.id].delivered_quantity"></label>
-      </div>
-      <label class="review-notes">
-        Receiving notes
-        <textarea v-model.trim="receivingNotes" rows="2" maxlength="500" placeholder="Optional receiving notes"></textarea>
-      </label>
-      <p v-if="!receivingValid" class="field-help">
-        Enter at least one valid delivery. Accepted units cannot exceed the outstanding quantity, and damaged plus rejected units cannot exceed delivered units.
+  <UiSectionCard
+    v-if="selected && !detailLoading"
+    :title="selected.order.po_number"
+    :description="`${selected.order.supplier_name} · PO status ${selected.order.status}`"
+  >
+    <div class="receiving-detail">
+      <p class="field-help">
+        Approval: <strong>{{ selected.order.approval_status }}</strong>
+        · Supplier: <strong>{{ selected.order.supplier_status || 'Historical — not tracked' }}</strong>
       </p>
-      <button class="primary-button" :disabled="!receivingValid">Record receiving</button>
-    </form>
 
-    <h3 v-if="selected.receivings.length">Receiving history</h3>
-    <article v-for="history in selected.receivings" :key="history.id" class="receiving-history">
-      <h4>Receiving #{{ history.id }} · {{ history.receiving_date }} · {{ history.received_by }}</h4>
-      <p v-if="history.notes">{{ history.notes }}</p>
-      <WorkspaceTable
-        :columns="[
-          { key: 'sku', label: 'SKU' },
-          { key: 'delivered_quantity', label: 'Delivered' },
-          { key: 'accepted_quantity', label: 'Accepted / fulfilled' },
-          { key: 'damaged_quantity', label: 'Damaged' },
-          { key: 'rejected_quantity', label: 'Rejected' },
-          { key: 'unit_cost', label: 'Unit cost' },
-          { key: 'accepted_cost', label: 'Accepted cost' }
-        ]"
-        :rows="history.items"
-      >
-        <template #cell-unit_cost="{ row }">{{ formatMoney(row.unit_cost) }}</template>
-        <template #cell-accepted_cost="{ row }">{{ formatMoney(row.accepted_cost) }}</template>
-      </WorkspaceTable>
-    </article>
-  </section>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Product</th>
+              <th>Ordered</th>
+              <th>Already received</th>
+              <th>Outstanding</th>
+              <th>Current stock</th>
+              <th>Unit cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in selected.items" :key="item.id">
+              <td>{{ item.sku }}</td>
+              <td>{{ item.product_name }}</td>
+              <td>{{ item.quantity_ordered }}</td>
+              <td>{{ item.fulfilled_quantity }}</td>
+              <td>{{ item.outstanding_quantity }}</td>
+              <td>{{ item.current_stock }}</td>
+              <td>{{ formatMoney(item.unit_cost) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="receiving-detail__subtitle">Receive stock</h3>
+      <form class="receiving-form" @submit.prevent="startReceive">
+        <div v-for="item in selected.items" :key="item.id" class="receiving-line">
+          <strong class="receiving-line__name">{{ item.sku }} — {{ item.product_name }}</strong>
+          <UiInput label="Outstanding" :model-value="item.outstanding_quantity" size="sm" disabled />
+          <UiInput
+            v-model.number="receiving[item.id].delivered_quantity"
+            type="number"
+            min="0"
+            label="Delivered"
+            size="sm"
+          />
+          <UiInput label="Accepted" :model-value="acceptedFor(receiving[item.id])" size="sm" disabled />
+          <UiInput
+            v-model.number="receiving[item.id].damaged_quantity"
+            type="number"
+            min="0"
+            :max="receiving[item.id].delivered_quantity"
+            label="Damaged"
+            size="sm"
+          />
+          <UiInput
+            v-model.number="receiving[item.id].rejected_quantity"
+            type="number"
+            min="0"
+            :max="receiving[item.id].delivered_quantity"
+            label="Rejected"
+            size="sm"
+          />
+        </div>
+        <label class="ui-field">
+          <span class="ui-field__label">Receiving notes</span>
+          <textarea
+            v-model.trim="receivingNotes"
+            class="ui-field-control"
+            rows="2"
+            maxlength="500"
+            placeholder="Optional receiving notes"
+          ></textarea>
+        </label>
+        <p v-if="!receivingValid" class="field-help">
+          Enter at least one valid delivery. Accepted units cannot exceed the outstanding quantity, and damaged plus rejected units cannot exceed delivered units.
+        </p>
+        <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+        <p v-if="message" class="success-message">{{ message }}</p>
+        <UiButton type="submit" :disabled="!receivingValid">Record receiving</UiButton>
+      </form>
+
+      <template v-if="selected.receivings.length">
+        <h3 class="receiving-detail__subtitle">Receiving history</h3>
+        <div class="receiving-history-list">
+          <article v-for="history in selected.receivings" :key="history.id" class="receiving-history">
+            <h4>Receiving #{{ history.id }} · {{ history.receiving_date }} · {{ history.received_by }}</h4>
+            <p v-if="history.notes" class="field-help">{{ history.notes }}</p>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Delivered</th>
+                    <th>Accepted / fulfilled</th>
+                    <th>Damaged</th>
+                    <th>Rejected</th>
+                    <th>Unit cost</th>
+                    <th>Accepted cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in history.items" :key="row.id || JSON.stringify(row)">
+                    <td>{{ row.sku }}</td>
+                    <td>{{ row.delivered_quantity }}</td>
+                    <td>{{ row.accepted_quantity }}</td>
+                    <td>{{ row.damaged_quantity }}</td>
+                    <td>{{ row.rejected_quantity }}</td>
+                    <td>{{ formatMoney(row.unit_cost) }}</td>
+                    <td>{{ formatMoney(row.accepted_cost) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </template>
+    </div>
+  </UiSectionCard>
+
+  <UiConfirmDialog
+    :open="confirmOpen"
+    :title="`Record receiving — ${selected?.order?.po_number}`"
+    :description="selected?.order?.supplier_name"
+    confirm-label="Confirm receiving"
+    :loading="submitting"
+    loading-label="Saving"
+    @confirm="confirmReceive"
+    @cancel="cancelReceive"
+  >
+    <ul class="receiving-summary">
+      <li v-for="line in pendingLines" :key="line.id">
+        {{ line.sku }} — Delivered {{ line.delivered }}, Accepted {{ line.accepted }}<template v-if="line.damaged">, Damaged {{ line.damaged }}</template><template v-if="line.rejected">, Rejected {{ line.rejected }}</template>
+      </li>
+    </ul>
+    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+  </UiConfirmDialog>
 </template>
+
+<style scoped>
+.filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+.receiving-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-5);
+}
+.receiving-detail__subtitle {
+  margin: 0;
+  color: var(--fm-color-text);
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.receiving-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-4);
+}
+.receiving-line {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(100px, 1fr));
+  align-items: end;
+  gap: var(--fm-space-3);
+  padding-bottom: var(--fm-space-3);
+  border-bottom: 1px solid var(--fm-color-border);
+}
+.receiving-line__name {
+  align-self: center;
+}
+.receiving-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-4);
+}
+.receiving-history h4 {
+  margin-bottom: var(--fm-space-2);
+}
+.receiving-summary {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-1);
+}
+@media (max-width: 900px) {
+  .receiving-line {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
