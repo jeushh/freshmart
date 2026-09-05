@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../../api/http.js'
-import { UiButton, UiInput, UiPageHeader, UiSelect, UiStatusBadge, UiTableShell } from '../../components/ui/index.js'
+import { UiButton, UiConfirmDialog, UiInput, UiPageHeader, UiSelect, UiStatusBadge, UiTableShell } from '../../components/ui/index.js'
 import { sessionStore } from '../../stores/session.js'
 
 const rows = ref([])
@@ -132,16 +132,20 @@ onMounted(load)
     </table>
   </UiTableShell>
 
-  <section v-if="review" class="ui-card review-panel" aria-labelledby="review-title">
-    <h2 id="review-title">{{ review.decision }} request</h2>
-    <p>{{ review.summary }}</p>
+  <UiConfirmDialog
+    :open="!!review"
+    :title="`${review?.decision} request`"
+    :description="review?.summary"
+    :confirm-label="`Confirm ${review?.decision}`"
+    :destructive="review?.decision === 'Rejected'"
+    :loading="submitting"
+    loading-label="Saving"
+    @confirm="confirmReview"
+    @cancel="cancelReview"
+  >
     <UiInput v-model="note" label="Review note" maxlength="500" hint="Optional. This note will be recorded with this action." />
     <p v-if="error" class="form-error" role="alert">{{ error }}</p>
-    <div class="request-actions">
-      <UiButton :loading="submitting" loading-label="Saving" @click="confirmReview">Confirm {{ review.decision }}</UiButton>
-      <UiButton variant="secondary" :disabled="submitting" @click="cancelReview">Cancel</UiButton>
-    </div>
-  </section>
+  </UiConfirmDialog>
 </template>
 
 <style scoped>
@@ -155,11 +159,5 @@ onMounted(load)
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-.review-panel {
-  margin-top: var(--fm-space-4);
-  padding: var(--fm-space-5);
-  display: grid;
-  gap: var(--fm-space-3);
 }
 </style>

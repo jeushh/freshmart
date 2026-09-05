@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../../api/http.js'
-import { UiButton, UiInput, UiPageHeader, UiStatusBadge, UiTableShell } from '../../components/ui/index.js'
+import { UiButton, UiConfirmDialog, UiInput, UiPageHeader, UiStatusBadge, UiTableShell } from '../../components/ui/index.js'
 import { sessionStore } from '../../stores/session.js'
 import { formatMoney } from '../../utils/formatters.js'
 
@@ -46,7 +46,20 @@ onMounted(() => load())
     </tbody></table>
     <template #footer><div class="pagination"><span>Page {{ pagination.current_page }} of {{ pagination.last_page }} · {{ pagination.total }} requests</span><div><UiButton size="sm" variant="secondary" :disabled="pagination.current_page <= 1" @click="load(pagination.current_page - 1)">Previous</UiButton><UiButton size="sm" variant="secondary" :disabled="pagination.current_page >= pagination.last_page" @click="load(pagination.current_page + 1)">Next</UiButton></div></div></template>
   </UiTableShell>
-  <section v-if="review" class="ui-card review-panel" aria-labelledby="review-title"><h2 id="review-title">{{ review.decision }} finance request</h2><p>{{ review.description }}</p><UiInput v-model="note" label="Review note" maxlength="500" hint="Optional. This note will be recorded with this action." /><div class="request-actions"><UiButton :loading="submitting" @click="confirmReview">Confirm {{ review.decision }}</UiButton><UiButton variant="secondary" :disabled="submitting" @click="cancelReview">Cancel</UiButton></div></section>
+  <UiConfirmDialog
+    :open="!!review"
+    :title="`${review?.decision} finance request`"
+    :description="review?.description"
+    :confirm-label="`Confirm ${review?.decision}`"
+    :destructive="review?.decision === 'Rejected'"
+    :loading="submitting"
+    loading-label="Saving"
+    @confirm="confirmReview"
+    @cancel="cancelReview"
+  >
+    <UiInput v-model="note" label="Review note" maxlength="500" hint="Optional. This note will be recorded with this action." />
+    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+  </UiConfirmDialog>
 </template>
 
-<style scoped>.request-actions{display:flex;flex-wrap:wrap;gap:.5rem}.review-panel{margin-top:1rem;padding:1rem}.pagination{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}</style>
+<style scoped>.request-actions{display:flex;flex-wrap:wrap;gap:.5rem}.pagination{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}</style>
