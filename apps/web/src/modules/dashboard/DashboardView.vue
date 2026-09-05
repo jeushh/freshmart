@@ -26,6 +26,25 @@ const primaryMetricKeys = [
   'low_stock'
 ]
 
+const metricDomains = {
+  active_users: 'admin',
+  today_sales: 'pos',
+  today_transactions: 'pos',
+  month_sales: 'pos',
+  active_employees: 'hr',
+  pending_hr_requests: 'hr',
+  outstanding_payroll: 'hr',
+  low_stock: 'inventory'
+}
+
+const domainIcons = {
+  admin: ['M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-6 9a6 6 0 0 1 12 0', 'M17 10v6m-3-3h6'],
+  pos: ['M3 5h2l1.5 9h10l2-6H6', 'M9 19a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm9 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z'],
+  hr: ['M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-6 9a6 6 0 0 1 12 0', 'M16 8a3 3 0 0 1 0 6m1 1a5 5 0 0 1 4 5'],
+  finance: ['M4 20V10m5 10V4m6 16v-7m5 7V7'],
+  inventory: ['M4 7.5 12 4l8 3.5-8 3.5-8-3.5Z', 'M4 7.5V16l8 4 8-4V7.5M12 11v9']
+}
+
 const salesFinanceMetricKeys = [
   'today_revenue',
   'month_revenue',
@@ -445,7 +464,8 @@ function metricRows(keys) {
     .map(metric => ({
       key: metric.key,
       label: metricLabelOverrides[metric.key] || metric.label,
-      value: metricValue(metric)
+      value: metricValue(metric),
+      domain: metricDomains[metric.key] || ''
     }))
 }
 
@@ -538,7 +558,15 @@ onMounted(load)
           :key="metric.key"
           :label="metric.label"
           :value="metric.value"
-        />
+        >
+          <template v-if="metric.domain && domainIcons[metric.domain]" #icon>
+            <span class="ui-kpi-card__icon" :class="`ui-kpi-card__icon--${metric.domain}`" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path v-for="path in domainIcons[metric.domain]" :key="path" :d="path" />
+              </svg>
+            </span>
+          </template>
+        </UiKpiCard>
       </section>
 
       <section v-if="salesChart" class="fm-dashboard__wide-section">

@@ -70,7 +70,7 @@
 }
 
 .fm-dashboard__wide-section .bar-fill {
-  background: var(--fm-color-primary-600);
+  background: linear-gradient(180deg, var(--fm-color-primary-500), var(--fm-color-primary-700));
 }
 
 .fm-dashboard__summary-list {

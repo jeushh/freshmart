@@ -153,6 +153,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         v-for="group in visibleGroups"
         :key="group.label"
         class="fm-sidebar__group"
+        :class="group.accent ? `fm-sidebar__group--${group.accent}` : ''"
         :aria-label="group.label"
       >
         <h2 class="fm-sidebar__group-label">{{ group.label }}</h2>

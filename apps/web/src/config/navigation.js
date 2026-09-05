@@ -26,6 +26,7 @@ export const navigationGroups = [
   },
   {
     label: 'Point of Sale',
+    accent: 'pos',
     items: [
       {
         to: '/pos',
@@ -40,6 +41,7 @@ export const navigationGroups = [
   },
   {
     label: 'Inventory',
+    accent: 'inventory',
     items: [
       {
         to: '/inventory',
@@ -98,6 +100,7 @@ export const navigationGroups = [
   },
   {
     label: 'Human Resources',
+    accent: 'hr',
     items: [
       {
         to: '/employees',
@@ -139,6 +142,7 @@ export const navigationGroups = [
   },
   {
     label: 'Finance',
+    accent: 'finance',
     items: [
       {
         to: '/finance',
