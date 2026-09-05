@@ -329,30 +329,37 @@ onMounted(load)
       <div class="form-actions">
         <button
           v-if="sessionStore.can('procurement.purchase_orders.manage') && selected.order.approval_status === 'Draft'"
+          class="secondary-button"
           @click="editSelected"
         >Edit</button>
         <button
           v-if="sessionStore.can('procurement.purchase_orders.manage') && selected.order.approval_status === 'Draft'"
+          class="primary-button"
           @click="transition('submit')"
         >Submit</button>
         <button
           v-if="sessionStore.can('procurement.purchase_orders.approve') && selected.order.approval_status === 'Submitted'"
+          class="primary-button"
           @click="transition('review', { decision: 'Approved', notes: actionNotes || null })"
         >Approve</button>
         <button
           v-if="sessionStore.can('procurement.purchase_orders.approve') && selected.order.approval_status === 'Submitted'"
+          class="secondary-button danger-button"
           @click="transition('review', { decision: 'Rejected', notes: actionNotes || null })"
         >Reject</button>
         <button
           v-if="canMarkSent"
+          class="primary-button"
           @click="markSent"
         >Mark Sent to Supplier</button>
         <button
           v-if="canRecordResponse"
+          class="primary-button"
           @click="openResponseModal"
         >Record Supplier Response</button>
         <button
           v-if="canCancelSelected"
+          class="secondary-button"
           @click="transition('cancel', { notes: actionNotes || null })"
         >Cancel</button>
       </div>
@@ -407,3 +414,16 @@ onMounted(load)
 
   </section>
 </template>
+
+<style scoped>
+.danger-button {
+  background: linear-gradient(180deg, #dc2626, #b91c1c);
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+.danger-button:hover {
+  background: #991b1b;
+  border-color: #991b1b;
+}
+</style>
