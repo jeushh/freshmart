@@ -1,6 +1,7 @@
 export { default as UiAvatar } from './UiAvatar.vue'
 export { default as UiButton } from './UiButton.vue'
 export { default as UiCheckbox } from './UiCheckbox.vue'
+export { default as UiConfirmDialog } from './UiConfirmDialog.vue'
 export { default as UiDropdownMenu } from './UiDropdownMenu.vue'
 export { default as UiEmptyState } from './UiEmptyState.vue'
 export { default as UiErrorState } from './UiErrorState.vue'
