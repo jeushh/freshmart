@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { api } from '../../api/http.js'
-import PageHeader from '../../components/common/PageHeader.vue'
+import UiPageHeader from '../../components/ui/UiPageHeader.vue'
 import { UiButton, UiEmptyState, UiSearchInput, UiStatusBadge } from '../../components/ui/index.js'
 import { sessionStore } from '../../stores/session.js'
 import { formatMoney } from '../../utils/formatters.js'
@@ -348,12 +348,12 @@ onMounted(load)
 
 <template>
   <div v-if="completedSale" class="receipt-page">
-    <PageHeader class="receipt-screen-header" title="Sale complete" description="The transaction was completed successfully.">
+    <UiPageHeader class="receipt-screen-header" title="Sale complete" description="The transaction was completed successfully.">
       <div class="receipt-actions">
         <UiButton variant="secondary" @click="printReceipt">Print receipt</UiButton>
         <UiButton @click="newSale">New sale</UiButton>
       </div>
-    </PageHeader>
+    </UiPageHeader>
 
     <div v-if="productRefreshError" class="form-error receipt-refresh-error" role="alert">
       <div>
@@ -418,7 +418,7 @@ onMounted(load)
   </div>
 
   <template v-else>
-    <PageHeader title="Point of Sale" description="Process sales with automatic stock, tax, and ledger updates." />
+    <UiPageHeader title="Point of Sale" description="Process sales with automatic stock, tax, and ledger updates." />
     <div v-if="error" class="form-error pos-error" role="alert">
       <span>{{ error }}</span>
       <UiButton
