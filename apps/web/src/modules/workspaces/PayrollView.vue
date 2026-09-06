@@ -27,37 +27,62 @@ const form = ref({
   deductions: 0
 })
 const loading = ref(true)
-const error = ref('')
+const listError = ref('')
+const formError = ref('')
+const reviewError = ref('')
 const message = ref('')
 const creating = ref(false)
 const review = ref(null)
 const submitting = ref(false)
 
+const MAX_HOURS_PER_FIELD = 744 // sanity ceiling: 24h x 31 days, the longest realistic pay period
+const regularHoursError = ref('')
+const overtimeHoursError = ref('')
+
+function validateHours() {
+  regularHoursError.value = ''
+  overtimeHoursError.value = ''
+
+  const regular = form.value.regular_hours
+  const overtime = form.value.overtime_hours
+
+  if (regular === '' || Number.isNaN(regular) || regular < 0 || regular > MAX_HOURS_PER_FIELD) {
+    regularHoursError.value = `Enter a value between 0 and ${MAX_HOURS_PER_FIELD}.`
+  }
+  if (overtime === '' || Number.isNaN(overtime) || overtime < 0 || overtime > MAX_HOURS_PER_FIELD) {
+    overtimeHoursError.value = `Enter a value between 0 and ${MAX_HOURS_PER_FIELD}.`
+  }
+
+  return !regularHoursError.value && !overtimeHoursError.value
+}
+
 async function load() {
   loading.value = true
-  error.value = ''
+  listError.value = ''
   try {
     await sessionStore.refreshSettings()
     const [d, e] = await Promise.all([api.payroll(), api.employees({ per_page: 100 })])
     rows.value = d.data
     employees.value = e.data
   } catch (requestError) {
-    error.value = requestError.message
+    listError.value = requestError.message
   } finally {
     loading.value = false
   }
 }
 
 async function save() {
-  creating.value = true
-  error.value = ''
+  formError.value = ''
   message.value = ''
+  if (!validateHours()) return
+
+  creating.value = true
   try {
     await api.post('/payroll', form.value)
     message.value = 'Payroll record created.'
     await load()
   } catch (requestError) {
-    error.value = requestError.message
+    formError.value = requestError.message
   } finally {
     creating.value = false
   }
@@ -65,22 +90,24 @@ async function save() {
 
 function startReview(row, decision) {
   review.value = { id: row.id, decision, summary: `${row.full_name} — period ending ${row.pay_period_end}` }
+  reviewError.value = ''
 }
 
 function cancelReview() {
   review.value = null
+  reviewError.value = ''
 }
 
 async function confirmReview() {
   if (!review.value) return
   submitting.value = true
-  error.value = ''
+  reviewError.value = ''
   try {
     await api.post(`/payroll/${review.value.id}/review`, { decision: review.value.decision })
     cancelReview()
     await load()
   } catch (requestError) {
-    error.value = requestError.message
+    reviewError.value = requestError.message
   } finally {
     submitting.value = false
   }
@@ -116,18 +143,24 @@ onMounted(load)
           v-model.number="form.regular_hours"
           type="number"
           min="0"
+          :max="MAX_HOURS_PER_FIELD"
           step=".25"
           label="Regular hours"
+          :error="regularHoursError"
+          @blur="validateHours"
         />
         <UiInput
           v-model.number="form.overtime_hours"
           type="number"
           min="0"
+          :max="MAX_HOURS_PER_FIELD"
           step=".25"
           label="Overtime hours"
+          :error="overtimeHoursError"
+          @blur="validateHours"
         />
       </div>
-      <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+      <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
       <p v-if="message" class="success-message">{{ message }}</p>
       <UiButton type="submit" :loading="creating" loading-label="Creating">Create payroll</UiButton>
     </form>
@@ -136,8 +169,8 @@ onMounted(load)
   <UiTableShell
     title="Payroll records"
     :loading="loading"
-    :error="error"
-    :empty="!loading && !error && !rows.length"
+    :error="listError"
+    :empty="!loading && !listError && !rows.length"
     empty-title="No payroll records found"
     empty-description="Create a payroll record above to get started."
     @retry="load"
@@ -181,7 +214,7 @@ onMounted(load)
     @confirm="confirmReview"
     @cancel="cancelReview"
   >
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <p v-if="reviewError" class="form-error" role="alert">{{ reviewError }}</p>
   </UiConfirmDialog>
 </template>
 
