@@ -286,6 +286,7 @@ class BusinessController extends Controller
                 DB::table('sales_ledger')->insert([
                     'order_id' => $orderId,
                     'item_sku' => $product->sku,
+                    'product_id' => $product->id,
                     'quantity_sold' => $item['quantity'],
                     'unit_price' => $unitPrice,
                     'subtotal_amount' => $tax['subtotal'],
