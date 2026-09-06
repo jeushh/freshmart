@@ -22,6 +22,9 @@ const form = ref({
   pay_period_end: '',
   regular_hours: 80,
   overtime_hours: 0,
+  rest_day_ot_hours: 0,
+  special_day_ot_hours: 0,
+  holiday_ot_hours: 0,
   allowances: 0,
   bonuses: 0,
   deductions: 0
@@ -38,22 +41,31 @@ const submitting = ref(false)
 const MAX_HOURS_PER_FIELD = 744 // sanity ceiling: 24h x 31 days, the longest realistic pay period
 const regularHoursError = ref('')
 const overtimeHoursError = ref('')
+const restDayOtHoursError = ref('')
+const specialDayOtHoursError = ref('')
+const holidayOtHoursError = ref('')
+
+const HOUR_FIELDS = [
+  ['regular_hours', regularHoursError],
+  ['overtime_hours', overtimeHoursError],
+  ['rest_day_ot_hours', restDayOtHoursError],
+  ['special_day_ot_hours', specialDayOtHoursError],
+  ['holiday_ot_hours', holidayOtHoursError]
+]
 
 function validateHours() {
-  regularHoursError.value = ''
-  overtimeHoursError.value = ''
+  let allValid = true
 
-  const regular = form.value.regular_hours
-  const overtime = form.value.overtime_hours
-
-  if (regular === '' || Number.isNaN(regular) || regular < 0 || regular > MAX_HOURS_PER_FIELD) {
-    regularHoursError.value = `Enter a value between 0 and ${MAX_HOURS_PER_FIELD}.`
-  }
-  if (overtime === '' || Number.isNaN(overtime) || overtime < 0 || overtime > MAX_HOURS_PER_FIELD) {
-    overtimeHoursError.value = `Enter a value between 0 and ${MAX_HOURS_PER_FIELD}.`
+  for (const [field, errorRef] of HOUR_FIELDS) {
+    errorRef.value = ''
+    const value = form.value[field]
+    if (value === '' || Number.isNaN(value) || value < 0 || value > MAX_HOURS_PER_FIELD) {
+      errorRef.value = `Enter a value between 0 and ${MAX_HOURS_PER_FIELD}.`
+      allValid = false
+    }
   }
 
-  return !regularHoursError.value && !overtimeHoursError.value
+  return allValid
 }
 
 async function load() {
@@ -155,8 +167,38 @@ onMounted(load)
           min="0"
           :max="MAX_HOURS_PER_FIELD"
           step=".25"
-          label="Overtime hours"
+          label="Ordinary OT hours"
           :error="overtimeHoursError"
+          @blur="validateHours"
+        />
+        <UiInput
+          v-model.number="form.rest_day_ot_hours"
+          type="number"
+          min="0"
+          :max="MAX_HOURS_PER_FIELD"
+          step=".25"
+          label="Rest-day OT hours"
+          :error="restDayOtHoursError"
+          @blur="validateHours"
+        />
+        <UiInput
+          v-model.number="form.special_day_ot_hours"
+          type="number"
+          min="0"
+          :max="MAX_HOURS_PER_FIELD"
+          step=".25"
+          label="Special-day OT hours"
+          :error="specialDayOtHoursError"
+          @blur="validateHours"
+        />
+        <UiInput
+          v-model.number="form.holiday_ot_hours"
+          type="number"
+          min="0"
+          :max="MAX_HOURS_PER_FIELD"
+          step=".25"
+          label="Holiday OT hours"
+          :error="holidayOtHoursError"
           @blur="validateHours"
         />
       </div>

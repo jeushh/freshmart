@@ -41,6 +41,9 @@ class PayrollController extends Controller
             'pay_period_end' => 'required|date|after_or_equal:pay_period_start',
             'regular_hours' => 'required|numeric|min:0',
             'overtime_hours' => 'required|numeric|min:0',
+            'rest_day_ot_hours' => 'nullable|numeric|min:0',
+            'special_day_ot_hours' => 'nullable|numeric|min:0',
+            'holiday_ot_hours' => 'nullable|numeric|min:0',
             'allowances' => 'nullable|numeric|min:0',
             'bonuses' => 'nullable|numeric|min:0',
             'deductions' => 'nullable|numeric|min:0',
@@ -52,14 +55,29 @@ class PayrollController extends Controller
         $basic = $employee->pay_type === 'Hourly'
             ? $data['regular_hours'] * $employee->hourly_rate
             : $employee->basic_salary / 2;
+
+        // Ordinary OT (beyond 8h on an ordinary working day): 1.25x hourly_rate.
         $overtime = $data['overtime_hours'] * $employee->hourly_rate * 1.25;
-        $net = $basic + $overtime + ($data['allowances'] ?? 0) + ($data['bonuses'] ?? 0) - ($data['deductions'] ?? 0);
+        // Rest day / special (non-working) day OT: 1.69x hourly_rate (130% day rate x 130% OT premium).
+        $restDayOt = ($data['rest_day_ot_hours'] ?? 0) * $employee->hourly_rate * 1.69;
+        $specialDayOt = ($data['special_day_ot_hours'] ?? 0) * $employee->hourly_rate * 1.69;
+        // Regular holiday OT: 2.60x hourly_rate (200% day rate x 130% OT premium).
+        $holidayOt = ($data['holiday_ot_hours'] ?? 0) * $employee->hourly_rate * 2.60;
+        // NOTE (V1 scope): combined day types (special/holiday falling on a rest
+        // day, at 1.95x / 3.38x) and night-shift differential are not covered by
+        // these four buckets — see the migration docblock for the full list.
+        $totalOvertimePay = $overtime + $restDayOt + $specialDayOt + $holidayOt;
+
+        $net = $basic + $totalOvertimePay + ($data['allowances'] ?? 0) + ($data['bonuses'] ?? 0) - ($data['deductions'] ?? 0);
         abort_if($net < 0, 422, 'Deductions cannot exceed gross pay.');
 
         $id = DB::table('payroll')->insertGetId($data + [
             'basic_salary' => round($basic, 2),
             'hourly_rate' => $employee->hourly_rate,
             'overtime_pay' => round($overtime, 2),
+            'rest_day_ot_pay' => round($restDayOt, 2),
+            'special_day_ot_pay' => round($specialDayOt, 2),
+            'holiday_ot_pay' => round($holidayOt, 2),
             'net_pay' => round($net, 2),
             'status' => 'Draft',
             'created_by' => $request->user()->username,
