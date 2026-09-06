@@ -20,7 +20,12 @@ const products = ref([])
 const restockRequests = ref([])
 const selected = ref(null)
 const filters = ref({ approval_status: '', status: '', supplier_status: '', supplier_id: '', search: '' })
-const error = ref('')
+const listError = ref('')
+const formError = ref('')
+const reviewError = ref('')
+const cancelError = ref('')
+const sendError = ref('')
+const responseError = ref('')
 const message = ref('')
 const loading = ref(true)
 const creating = ref(false)
@@ -90,7 +95,7 @@ const canRecordResponse = computed(() => {
 async function load(refreshSelected = false) {
   loading.value = true
   try {
-    error.value = ''
+    listError.value = ''
     await sessionStore.refreshSettings()
     const params = Object.fromEntries(Object.entries(filters.value).filter(([, value]) => value))
     const data = await api.get('/purchase-orders', { ...params, per_page: 100 })
@@ -100,7 +105,7 @@ async function load(refreshSelected = false) {
     restockRequests.value = data.approved_restock_requests
     if (refreshSelected && selected.value) await open(selected.value.order.id)
   } catch (requestError) {
-    error.value = requestError.message
+    listError.value = requestError.message
   } finally {
     loading.value = false
   }
@@ -134,7 +139,7 @@ function useRestock() {
 async function save() {
   creating.value = true
   try {
-    error.value = ''
+    formError.value = ''
     message.value = ''
     const payload = {
       ...form.value,
@@ -149,7 +154,7 @@ async function save() {
     form.value = blankForm()
     await load()
   } catch (requestError) {
-    error.value = requestError.message
+    formError.value = requestError.message
   } finally {
     creating.value = false
   }
@@ -157,11 +162,11 @@ async function save() {
 
 async function open(id) {
   try {
-    error.value = ''
+    formError.value = ''
     responseForm.value.open = false
     selected.value = await api.get(`/purchase-orders/${id}`)
   } catch (requestError) {
-    error.value = requestError.message
+    formError.value = requestError.message
   }
 }
 
@@ -182,9 +187,9 @@ function editSelected() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-async function transition(action, payload = {}) {
+async function transition(action, payload = {}, errorRef = reviewError) {
   try {
-    error.value = ''
+    errorRef.value = ''
     message.value = ''
     const id = selected.value.order.id
     const data = await api.post(`/purchase-orders/${id}/${action}`, payload)
@@ -193,7 +198,7 @@ async function transition(action, payload = {}) {
     await load()
     return true
   } catch (requestError) {
-    error.value = requestError.message
+    errorRef.value = requestError.message
     return false
   }
 }
@@ -230,7 +235,7 @@ function dismissCancelOrder() {
 
 async function confirmCancelOrder() {
   submitting.value = true
-  const ok = await transition('cancel', { notes: cancelNote.value.trim() || null })
+  const ok = await transition('cancel', { notes: cancelNote.value.trim() || null }, cancelError)
   submitting.value = false
   if (ok) dismissCancelOrder()
 }
@@ -242,7 +247,7 @@ function startSend() {
 
 async function confirmSend() {
   submitting.value = true
-  const ok = await transition('send')
+  const ok = await transition('send', {}, sendError)
   submitting.value = false
   if (ok) sendDialogOpen.value = false
 }
@@ -260,7 +265,7 @@ function openResponseModal() {
 async function submitResponse() {
   submitting.value = true
   try {
-    error.value = ''
+    responseError.value = ''
     message.value = ''
     const id = selected.value.order.id
     const payload = {
@@ -275,7 +280,7 @@ async function submitResponse() {
     responseForm.value.open = false
     await load()
   } catch (requestError) {
-    error.value = requestError.message
+    responseError.value = requestError.message
   } finally {
     submitting.value = false
   }
@@ -286,7 +291,7 @@ onMounted(load)
 
 <template>
   <UiPageHeader title="Purchase Orders" description="Create, approve, and track supplier orders." />
-  <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+  <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
   <p v-if="message" class="success-message">{{ message }}</p>
 
   <UiSectionCard
@@ -350,8 +355,8 @@ onMounted(load)
   <UiTableShell
     title="Purchase orders"
     :loading="loading"
-    :error="error"
-    :empty="!loading && !error && !orders.length"
+    :error="listError"
+    :empty="!loading && !listError && !orders.length"
     empty-title="No purchase orders found"
     empty-description="Try different filters, or create a purchase order above."
     @retry="load"
@@ -506,7 +511,7 @@ onMounted(load)
       maxlength="500"
       hint="Optional. This note will be recorded with this action."
     />
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <p v-if="reviewError" class="form-error" role="alert">{{ reviewError }}</p>
   </UiConfirmDialog>
 
   <UiConfirmDialog
@@ -526,7 +531,7 @@ onMounted(load)
       maxlength="500"
       hint="Optional. This note will be recorded with this action."
     />
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <p v-if="cancelError" class="form-error" role="alert">{{ cancelError }}</p>
   </UiConfirmDialog>
 
   <UiConfirmDialog
@@ -540,7 +545,7 @@ onMounted(load)
     @cancel="sendDialogOpen = false"
   >
     <p class="field-help">This marks the order as sent to the supplier. This can't be undone from here.</p>
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <p v-if="sendError" class="form-error" role="alert">{{ sendError }}</p>
   </UiConfirmDialog>
 
   <UiConfirmDialog
@@ -574,7 +579,7 @@ onMounted(load)
         placeholder="Vendor communication notes..."
       ></textarea>
     </label>
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <p v-if="responseError" class="form-error" role="alert">{{ responseError }}</p>
   </UiConfirmDialog>
 </template>
 
