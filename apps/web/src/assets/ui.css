@@ -629,6 +629,7 @@
 .ui-table-shell__scroll {
   max-width: 100%;
   overflow-x: auto;
+  padding-left: var(--fm-space-2);
 }
 
 .ui-table-shell__scroll > table {
