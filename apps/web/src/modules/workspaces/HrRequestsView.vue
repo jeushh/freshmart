@@ -8,7 +8,8 @@ const rows = ref([])
 const employees = ref([])
 const filters = ref({ status: '', request_type: '', employee_id: '', from: '', to: '' })
 const loading = ref(true)
-const error = ref('')
+const listError = ref('')
+const reviewError = ref('')
 const review = ref(null)
 const note = ref('')
 const submitting = ref(false)
@@ -17,14 +18,14 @@ const canReview = computed(() => sessionStore.can('hr.requests.approve'))
 
 async function load() {
   loading.value = true
-  error.value = ''
+  listError.value = ''
   try {
     const params = Object.fromEntries(Object.entries(filters.value).filter(([, value]) => value))
     const data = await api.get('/hr/requests', { ...params, per_page: 100 })
     rows.value = data.requests.data
     employees.value = data.employees
   } catch (requestError) {
-    error.value = requestError.message
+    listError.value = requestError.message
   } finally {
     loading.value = false
   }
@@ -33,23 +34,25 @@ async function load() {
 function startReview(row, decision) {
   review.value = { id: row.id, decision, summary: `${row.request_type} — ${row.full_name}` }
   note.value = ''
+  reviewError.value = ''
 }
 
 function cancelReview() {
   review.value = null
   note.value = ''
+  reviewError.value = ''
 }
 
 async function confirmReview() {
   if (!review.value) return
   submitting.value = true
-  error.value = ''
+  reviewError.value = ''
   try {
     await api.post(`/hr/requests/${review.value.id}/review`, { decision: review.value.decision, notes: note.value.trim() || null })
     cancelReview()
     await load()
   } catch (requestError) {
-    error.value = requestError.message
+    reviewError.value = requestError.message
   } finally {
     submitting.value = false
   }
@@ -64,8 +67,8 @@ onMounted(load)
   <UiTableShell
     title="Request queue"
     :loading="loading"
-    :error="error"
-    :empty="!loading && !error && !rows.length"
+    :error="listError"
+    :empty="!loading && !listError && !rows.length"
     empty-title="No HR requests found"
     empty-description="Try different filters, or check back later."
     @retry="load"
@@ -144,7 +147,7 @@ onMounted(load)
     @cancel="cancelReview"
   >
     <UiInput v-model="note" label="Review note" maxlength="500" hint="Optional. This note will be recorded with this action." />
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <p v-if="reviewError" class="form-error" role="alert">{{ reviewError }}</p>
   </UiConfirmDialog>
 </template>
 

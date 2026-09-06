@@ -18,7 +18,9 @@ const products = ref([])
 const filters = ref({ status: '', priority: '', search: '' })
 const form = ref({ product_id: '', requested_quantity: 1, priority: 'Normal', reason: '', notes: '' })
 const loading = ref(true)
-const error = ref('')
+const listError = ref('')
+const formError = ref('')
+const reviewError = ref('')
 const message = ref('')
 const creating = ref(false)
 const review = ref(null)
@@ -30,14 +32,14 @@ const selectedProduct = computed(() => products.value.find(product => product.id
 
 async function load() {
   loading.value = true
-  error.value = ''
+  listError.value = ''
   try {
     const params = Object.fromEntries(Object.entries(filters.value).filter(([, value]) => value))
     const data = await api.get('/restock-requests', { ...params, per_page: 100 })
     rows.value = data.requests.data
     products.value = data.products
   } catch (requestError) {
-    error.value = requestError.message
+    listError.value = requestError.message
   } finally {
     loading.value = false
   }
@@ -50,7 +52,7 @@ function selectProduct() {
 
 async function createRequest() {
   creating.value = true
-  error.value = ''
+  formError.value = ''
   message.value = ''
   try {
     await api.post('/restock-requests', form.value)
@@ -58,7 +60,7 @@ async function createRequest() {
     form.value = { product_id: '', requested_quantity: 1, priority: 'Normal', reason: '', notes: '' }
     await load()
   } catch (requestError) {
-    error.value = requestError.message
+    formError.value = requestError.message
   } finally {
     creating.value = false
   }
@@ -67,23 +69,25 @@ async function createRequest() {
 function startReview(row, decision) {
   review.value = { id: row.id, decision, summary: `${row.ref_number} — ${row.product_name}` }
   note.value = ''
+  reviewError.value = ''
 }
 
 function cancelReview() {
   review.value = null
   note.value = ''
+  reviewError.value = ''
 }
 
 async function confirmReview() {
   if (!review.value) return
   submitting.value = true
-  error.value = ''
+  reviewError.value = ''
   try {
     await api.post(`/restock-requests/${review.value.id}/review`, { decision: review.value.decision, notes: note.value.trim() || null })
     cancelReview()
     await load()
   } catch (requestError) {
-    error.value = requestError.message
+    reviewError.value = requestError.message
   } finally {
     submitting.value = false
   }
@@ -123,7 +127,7 @@ onMounted(load)
       <p v-if="selectedProduct" class="restock-form__help">
         Current {{ selectedProduct.stock_quantity }} · Reorder {{ selectedProduct.reorder_level }} · Maximum {{ selectedProduct.max_stock }}
       </p>
-      <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+      <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
       <p v-if="message" class="success-message">{{ message }}</p>
       <UiButton type="submit" :loading="creating" loading-label="Submitting">Submit request</UiButton>
     </form>
@@ -132,8 +136,8 @@ onMounted(load)
   <UiTableShell
     title="Request queue"
     :loading="loading"
-    :error="error"
-    :empty="!loading && !error && !rows.length"
+    :error="listError"
+    :empty="!loading && !listError && !rows.length"
     empty-title="No restock requests found"
     empty-description="Try different filters, or check back later."
     @retry="load"
@@ -209,7 +213,7 @@ onMounted(load)
     @cancel="cancelReview"
   >
     <UiInput v-model="note" label="Review note" maxlength="500" hint="Optional. This note will be recorded with this action." />
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+    <p v-if="reviewError" class="form-error" role="alert">{{ reviewError }}</p>
   </UiConfirmDialog>
 </template>
 
