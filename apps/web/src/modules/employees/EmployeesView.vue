@@ -55,6 +55,7 @@ const selectedEmployee = computed(() => rows.value.find(row => row.id === select
 
 function emptyForm() {
   return {
+    id: null,
     employee_code: '',
     name: '',
     email: '',
@@ -103,6 +104,40 @@ function scrollToSection(id) {
   document.getElementById(id)?.scrollIntoView({ block: 'start' })
 }
 
+const statusApiToForm = {
+  Active: 'active',
+  'On Leave': 'on_leave',
+  Terminated: 'terminated'
+}
+
+function editEmployee(row) {
+  formError.value = ''
+  formErrors.value = {}
+  successMessage.value = ''
+  form.value = {
+    id: row.id,
+    employee_code: row.employee_no,
+    name: row.full_name,
+    email: row.email || '',
+    phone: row.phone || '',
+    department: row.department || '',
+    position: row.position || '',
+    status: statusApiToForm[row.employment_status] || 'active',
+    pay_type: row.pay_type === 'Hourly' ? 'hourly' : 'monthly',
+    basic_salary: row.basic_salary || 0,
+    hourly_rate: row.hourly_rate || 0,
+    leave_balance: row.leave_balance ?? 15
+  }
+  scrollToSection('add-employee')
+}
+
+function cancelEdit() {
+  form.value = emptyForm()
+  formError.value = ''
+  formErrors.value = {}
+  successMessage.value = ''
+}
+
 async function load(showLoading = true) {
   if (showLoading) loading.value = true
   loadError.value = ''
@@ -133,11 +168,17 @@ async function save() {
   formError.value = ''
   formErrors.value = {}
   successMessage.value = ''
-  const createdName = form.value.name
+  const savedName = form.value.name
+  const editingId = form.value.id
 
   try {
-    await api.post('/employees', form.value)
-    successMessage.value = `${createdName} has been added.`
+    if (editingId) {
+      await api.put(`/employees/${editingId}`, form.value)
+      successMessage.value = `${savedName} has been updated.`
+    } else {
+      await api.post('/employees', form.value)
+      successMessage.value = `${savedName} has been added.`
+    }
     form.value = emptyForm()
     await load(false)
   } catch (requestError) {
@@ -178,7 +219,10 @@ onMounted(load)
         :description="`Employee No. ${selectedEmployee.employee_no}`"
       >
         <template #actions>
-          <UiButton variant="ghost" size="sm" @click="closeProfile">Close</UiButton>
+          <div class="fm-employees__profile-actions">
+            <UiButton v-if="canEdit" size="sm" @click="editEmployee(selectedEmployee)">Edit</UiButton>
+            <UiButton variant="ghost" size="sm" @click="closeProfile">Close</UiButton>
+          </div>
         </template>
 
         <div class="fm-employees__profile-header">
@@ -310,8 +354,8 @@ onMounted(load)
         v-if="canEdit"
         id="add-employee"
         class="fm-employees__anchor"
-        title="Add employee"
-        description="Create a new employee record."
+        :title="form.id ? 'Edit employee' : 'Add employee'"
+        :description="form.id ? `Update ${form.name || 'this employee'}'s record.` : 'Create a new employee record.'"
       >
         <form class="fm-employees__form" @submit.prevent="save">
           <fieldset class="fm-employees__fieldset">
@@ -382,9 +426,17 @@ onMounted(load)
             <div aria-live="polite">
               <p v-if="formError" class="fm-employees__message fm-employees__message--error" role="alert">{{ formError }}</p>
               <p v-else-if="successMessage" class="fm-employees__message fm-employees__message--success">{{ successMessage }}</p>
+              <p v-else-if="form.id" class="fm-employees__form-note">Changes are saved immediately.</p>
               <p v-else class="fm-employees__form-note">New employees are added immediately after creation.</p>
             </div>
-            <UiButton type="submit" :loading="saving" loading-label="Adding employee">Add employee</UiButton>
+            <div class="fm-employees__form-actions">
+              <UiButton
+                type="submit"
+                :loading="saving"
+                :loading-label="form.id ? 'Saving changes' : 'Adding employee'"
+              >{{ form.id ? 'Save changes' : 'Add employee' }}</UiButton>
+              <UiButton v-if="form.id" variant="secondary" type="button" :disabled="saving" @click="cancelEdit">Cancel edit</UiButton>
+            </div>
           </div>
         </form>
       </UiSectionCard>
@@ -506,6 +558,12 @@ onMounted(load)
   font-size: var(--fm-font-size-xs);
 }
 
+.fm-employees__profile-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--fm-space-2);
+}
+
 .fm-employees__profile-header {
   display: flex;
   align-items: center;
@@ -598,6 +656,12 @@ onMounted(load)
   min-width: 0;
 }
 
+.fm-employees__form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--fm-space-2);
+}
+
 .fm-employees__form-note,
 .fm-employees__message {
   margin: 0;
@@ -628,6 +692,10 @@ onMounted(load)
 
   .fm-employees__form-footer {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fm-employees__form-actions {
     flex-direction: column;
   }
 
