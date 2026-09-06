@@ -26,6 +26,7 @@ const reviewError = ref('')
 const cancelError = ref('')
 const sendError = ref('')
 const responseError = ref('')
+const submitError = ref('')
 const message = ref('')
 const loading = ref(true)
 const creating = ref(false)
@@ -168,6 +169,10 @@ async function open(id) {
   } catch (requestError) {
     formError.value = requestError.message
   }
+}
+
+async function submitOrder() {
+  await transition('submit', {}, submitError)
 }
 
 function editSelected() {
@@ -448,7 +453,7 @@ onMounted(load)
       >Edit</UiButton>
       <UiButton
         v-if="sessionStore.can('procurement.purchase_orders.manage') && selected.order.approval_status === 'Draft'"
-        @click="transition('submit')"
+        @click="submitOrder"
       >Submit</UiButton>
       <UiButton
         v-if="sessionStore.can('procurement.purchase_orders.approve') && selected.order.approval_status === 'Submitted'"
@@ -463,6 +468,7 @@ onMounted(load)
       <UiButton v-if="canRecordResponse" @click="openResponseModal">Record Supplier Response</UiButton>
       <UiButton v-if="canCancelSelected" variant="destructive" @click="startCancelOrder">Cancel</UiButton>
     </div>
+    <p v-if="submitError" class="form-error" role="alert">{{ submitError }}</p>
 
     <div class="table-scroll">
       <table>
