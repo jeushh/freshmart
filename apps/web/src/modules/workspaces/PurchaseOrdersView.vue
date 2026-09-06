@@ -2,9 +2,17 @@
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../../api/http.js'
 import { sessionStore } from '../../stores/session.js'
-import PageHeader from '../../components/common/PageHeader.vue'
-import WorkspaceTable from '../../components/common/WorkspaceTable.vue'
 import { formatMoney } from '../../utils/formatters.js'
+import {
+  UiButton,
+  UiConfirmDialog,
+  UiInput,
+  UiPageHeader,
+  UiSectionCard,
+  UiSelect,
+  UiStatusBadge,
+  UiTableShell
+} from '../../components/ui/index.js'
 
 const orders = ref([])
 const suppliers = ref([])
@@ -12,9 +20,18 @@ const products = ref([])
 const restockRequests = ref([])
 const selected = ref(null)
 const filters = ref({ approval_status: '', status: '', supplier_status: '', supplier_id: '', search: '' })
-const actionNotes = ref('')
 const error = ref('')
 const message = ref('')
+const loading = ref(true)
+const creating = ref(false)
+const submitting = ref(false)
+
+const review = ref(null)
+const reviewNote = ref('')
+const cancelDialogOpen = ref(false)
+const cancelNote = ref('')
+const sendDialogOpen = ref(false)
+
 const responseForm = ref({
   open: false,
   response: 'Accepted',
@@ -33,6 +50,10 @@ const blankForm = () => ({
   items: [blankLine()]
 })
 const form = ref(blankForm())
+const formTitle = computed(() => (form.value.id ? 'Edit purchase order' : 'New purchase order'))
+const formDescription = computed(() => (form.value.id
+  ? 'Update this draft purchase order before submitting it for approval.'
+  : 'Create a draft purchase order for a supplier, optionally sourced from an approved restock request.'))
 const availableProducts = computed(() => products.value.filter(product =>
   !form.value.supplier_id || !product.supplier_id || product.supplier_id === Number(form.value.supplier_id)
 ))
@@ -66,16 +87,8 @@ const canRecordResponse = computed(() => {
     && order.supplier_status === 'Sent'
 })
 
-function supplierStatusText(status) {
-  if (status === null || status === undefined) return 'Historical — not tracked'
-  if (status === 'Not Sent') return 'Not Sent'
-  if (status === 'Sent') return 'Sent to Supplier'
-  if (status === 'Accepted') return 'Supplier Accepted'
-  if (status === 'Rejected') return 'Supplier Rejected'
-  return status
-}
-
 async function load(refreshSelected = false) {
+  loading.value = true
   try {
     error.value = ''
     await sessionStore.refreshSettings()
@@ -88,6 +101,8 @@ async function load(refreshSelected = false) {
     if (refreshSelected && selected.value) await open(selected.value.order.id)
   } catch (requestError) {
     error.value = requestError.message
+  } finally {
+    loading.value = false
   }
 }
 
@@ -117,6 +132,7 @@ function useRestock() {
 }
 
 async function save() {
+  creating.value = true
   try {
     error.value = ''
     message.value = ''
@@ -134,6 +150,8 @@ async function save() {
     await load()
   } catch (requestError) {
     error.value = requestError.message
+  } finally {
+    creating.value = false
   }
 }
 
@@ -172,15 +190,61 @@ async function transition(action, payload = {}) {
     const data = await api.post(`/purchase-orders/${id}/${action}`, payload)
     selected.value = data
     message.value = `Purchase order ${action} completed.`
-    actionNotes.value = ''
     await load()
+    return true
   } catch (requestError) {
     error.value = requestError.message
+    return false
   }
 }
 
-async function markSent() {
-  await transition('send')
+function startReview(decision) {
+  if (!selected.value) return
+  review.value = { decision, summary: `${selected.value.order.po_number} — ${selected.value.order.supplier_name}` }
+  reviewNote.value = ''
+}
+
+function dismissReview() {
+  review.value = null
+  reviewNote.value = ''
+}
+
+async function confirmReview() {
+  if (!review.value) return
+  submitting.value = true
+  const ok = await transition('review', { decision: review.value.decision, notes: reviewNote.value.trim() || null })
+  submitting.value = false
+  if (ok) dismissReview()
+}
+
+function startCancelOrder() {
+  if (!selected.value) return
+  cancelDialogOpen.value = true
+  cancelNote.value = ''
+}
+
+function dismissCancelOrder() {
+  cancelDialogOpen.value = false
+  cancelNote.value = ''
+}
+
+async function confirmCancelOrder() {
+  submitting.value = true
+  const ok = await transition('cancel', { notes: cancelNote.value.trim() || null })
+  submitting.value = false
+  if (ok) dismissCancelOrder()
+}
+
+function startSend() {
+  if (!selected.value) return
+  sendDialogOpen.value = true
+}
+
+async function confirmSend() {
+  submitting.value = true
+  const ok = await transition('send')
+  submitting.value = false
+  if (ok) sendDialogOpen.value = false
 }
 
 function openResponseModal() {
@@ -194,6 +258,7 @@ function openResponseModal() {
 }
 
 async function submitResponse() {
+  submitting.value = true
   try {
     error.value = ''
     message.value = ''
@@ -211,6 +276,8 @@ async function submitResponse() {
     await load()
   } catch (requestError) {
     error.value = requestError.message
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -218,212 +285,341 @@ onMounted(load)
 </script>
 
 <template>
-  <PageHeader title="Purchase Orders" description="Create, approve, and track supplier orders." />
-  <p v-if="error" class="form-error">{{ error }}</p>
+  <UiPageHeader title="Purchase Orders" description="Create, approve, and track supplier orders." />
+  <p v-if="error" class="form-error" role="alert">{{ error }}</p>
   <p v-if="message" class="success-message">{{ message }}</p>
 
-  <form
+  <UiSectionCard
     v-if="sessionStore.can('procurement.purchase_orders.manage')"
-    class="management-form"
-    @submit.prevent="save"
+    :title="formTitle"
+    :description="formDescription"
   >
-    <div class="form-grid">
-      <label>
-        Supplier
-        <select v-model="form.supplier_id" required>
+    <form class="po-form" @submit.prevent="save">
+      <div class="po-form__fields">
+        <UiSelect v-model="form.supplier_id" label="Supplier" required>
           <option value="">Select supplier</option>
           <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option>
-        </select>
-      </label>
-      <label>
-        Approved restock request
-        <select v-model="form.restock_request_id" @change="useRestock">
+        </UiSelect>
+        <UiSelect v-model="form.restock_request_id" label="Approved restock request" @change="useRestock">
           <option :value="null">None</option>
           <option v-for="restock in restockRequests" :key="restock.id" :value="restock.id">
             {{ restock.ref_number }} — {{ restock.product_name }}
           </option>
-        </select>
-      </label>
-      <label>Expected delivery<input v-model="form.expected_delivery_date" type="date"></label>
-      <label class="full-field">Notes<textarea v-model.trim="form.notes" rows="2" maxlength="1000" /></label>
-    </div>
+        </UiSelect>
+        <UiInput v-model="form.expected_delivery_date" type="date" label="Expected delivery" />
+        <label class="ui-field po-form__span">
+          <span class="ui-field__label">Notes</span>
+          <textarea v-model.trim="form.notes" class="ui-field-control" rows="2" maxlength="1000"></textarea>
+        </label>
+      </div>
 
-    <h3>Line items</h3>
-    <div v-for="(line, index) in form.items" :key="index" class="line-item">
-      <select v-model="line.product_id" required @change="setProduct(line)">
-        <option value="">Select product</option>
-        <option v-for="product in availableProducts" :key="product.id" :value="product.id">
-          {{ product.sku }} — {{ product.name }}
-        </option>
-      </select>
-      <input v-model.number="line.quantity" type="number" min="1" placeholder="Quantity" required>
-      <input v-model.number="line.unit_cost" type="number" min="0" step=".01" placeholder="Unit cost" required>
-      <strong>{{ formatMoney(Number(line.quantity || 0) * Number(line.unit_cost || 0)) }}</strong>
-      <button class="secondary-button" type="button" @click="removeLine(index)">Remove</button>
-    </div>
+      <h3 class="po-form__subheading">Line items</h3>
+      <div v-for="(line, index) in form.items" :key="index" class="po-line-item">
+        <UiSelect v-model="line.product_id" label="Product" required @change="setProduct(line)">
+          <option value="">Select product</option>
+          <option v-for="product in availableProducts" :key="product.id" :value="product.id">
+            {{ product.sku }} — {{ product.name }}
+          </option>
+        </UiSelect>
+        <UiInput v-model.number="line.quantity" type="number" min="1" label="Quantity" required />
+        <UiInput v-model.number="line.unit_cost" type="number" min="0" step=".01" label="Unit cost" required />
+        <div class="po-line-item__total">
+          <span class="ui-field__label">Line total</span>
+          <strong>{{ formatMoney(Number(line.quantity || 0) * Number(line.unit_cost || 0)) }}</strong>
+        </div>
+        <UiButton
+          type="button"
+          variant="secondary"
+          size="sm"
+          :disabled="form.items.length <= 1"
+          @click="removeLine(index)"
+        >Remove</UiButton>
+      </div>
+
+      <div class="form-actions">
+        <UiButton type="button" variant="secondary" @click="addLine">Add line</UiButton>
+        <strong>Display total: {{ formatMoney(formTotal) }}</strong>
+        <UiButton type="submit" :loading="creating" loading-label="Saving">
+          {{ form.id ? 'Update draft' : 'Create draft' }}
+        </UiButton>
+        <UiButton v-if="form.id" type="button" variant="secondary" @click="form = blankForm()">Cancel edit</UiButton>
+      </div>
+    </form>
+  </UiSectionCard>
+
+  <UiTableShell
+    title="Purchase orders"
+    :loading="loading"
+    :error="error"
+    :empty="!loading && !error && !orders.length"
+    empty-title="No purchase orders found"
+    empty-description="Try different filters, or create a purchase order above."
+    @retry="load"
+  >
+    <template #toolbar>
+      <form class="filter-form" @submit.prevent="load">
+        <UiInput v-model.trim="filters.search" label="Search" size="sm" placeholder="PO number or supplier" />
+        <UiSelect v-model="filters.approval_status" label="Approval" size="sm">
+          <option value="">All approval states</option>
+          <option>Draft</option>
+          <option>Submitted</option>
+          <option>Approved</option>
+          <option>Rejected</option>
+          <option>Cancelled</option>
+        </UiSelect>
+        <UiSelect v-model="filters.supplier_status" label="Supplier status" size="sm">
+          <option value="">All supplier statuses</option>
+          <option value="Not Sent">Not Sent</option>
+          <option value="Sent">Sent</option>
+          <option value="Accepted">Accepted</option>
+          <option value="Rejected">Rejected</option>
+        </UiSelect>
+        <UiSelect v-model="filters.status" label="Receiving" size="sm">
+          <option value="">All receiving states</option>
+          <option>Pending</option>
+          <option>Approved</option>
+          <option>Ordered</option>
+          <option>Partially Received</option>
+          <option>Fully Received</option>
+          <option>Cancelled</option>
+        </UiSelect>
+        <UiButton type="submit" variant="secondary" size="sm">Apply filters</UiButton>
+      </form>
+    </template>
+    <table>
+      <thead>
+        <tr>
+          <th>PO number</th>
+          <th>Supplier</th>
+          <th>Total</th>
+          <th>Approval</th>
+          <th>Supplier status</th>
+          <th>Receiving</th>
+          <th>Fulfillment</th>
+          <th>Expected</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="row in orders" :key="row.id">
+          <td>{{ row.po_number }}</td>
+          <td>{{ row.supplier_name }}</td>
+          <td>{{ formatMoney(row.total_amount) }}</td>
+          <td><UiStatusBadge :status="row.approval_status" /></td>
+          <td>
+            <UiStatusBadge v-if="row.supplier_status" :status="row.supplier_status" />
+            <span v-else class="field-help">Historical — not tracked</span>
+          </td>
+          <td><UiStatusBadge :status="row.status" /></td>
+          <td>{{ row.total_fulfilled }} / {{ row.total_ordered }}</td>
+          <td>{{ row.expected_delivery_date }}</td>
+          <td><UiButton size="sm" @click="open(row.id)">Details</UiButton></td>
+        </tr>
+      </tbody>
+    </table>
+  </UiTableShell>
+
+  <UiSectionCard
+    v-if="selected"
+    :title="selected.order.po_number"
+    :description="`${selected.order.supplier_name} · Total ${formatMoney(selected.order.total_amount)}`"
+  >
+    <p class="field-help">
+      Approval: <strong>{{ selected.order.approval_status }}</strong>
+      · Supplier: <strong>{{ selected.order.supplier_status || 'Historical — not tracked' }}</strong>
+      <span v-if="selected.order.sent_by"> · Sent by {{ selected.order.sent_by }} at {{ selected.order.sent_to_supplier_at }}</span>
+      <span v-if="selected.order.supplier_responded_at"> · Responded at {{ selected.order.supplier_responded_at }}</span>
+      <span v-if="selected.order.supplier_reference"> · Ref #{{ selected.order.supplier_reference }}</span>
+    </p>
+    <p v-if="selected.order.supplier_response_notes" class="field-help">
+      Response notes: {{ selected.order.supplier_response_notes }}
+    </p>
+
     <div class="form-actions">
-      <button class="secondary-button" type="button" @click="addLine">Add line</button>
-      <strong>Display total: {{ formatMoney(formTotal) }}</strong>
-      <button class="primary-button">{{ form.id ? 'Update draft' : 'Create draft' }}</button>
-      <button v-if="form.id" class="secondary-button" type="button" @click="form = blankForm()">Cancel edit</button>
+      <UiButton
+        v-if="sessionStore.can('procurement.purchase_orders.manage') && selected.order.approval_status === 'Draft'"
+        variant="secondary"
+        @click="editSelected"
+      >Edit</UiButton>
+      <UiButton
+        v-if="sessionStore.can('procurement.purchase_orders.manage') && selected.order.approval_status === 'Draft'"
+        @click="transition('submit')"
+      >Submit</UiButton>
+      <UiButton
+        v-if="sessionStore.can('procurement.purchase_orders.approve') && selected.order.approval_status === 'Submitted'"
+        @click="startReview('Approved')"
+      >Approve</UiButton>
+      <UiButton
+        v-if="sessionStore.can('procurement.purchase_orders.approve') && selected.order.approval_status === 'Submitted'"
+        variant="destructive"
+        @click="startReview('Rejected')"
+      >Reject</UiButton>
+      <UiButton v-if="canMarkSent" @click="startSend">Mark Sent to Supplier</UiButton>
+      <UiButton v-if="canRecordResponse" @click="openResponseModal">Record Supplier Response</UiButton>
+      <UiButton v-if="canCancelSelected" variant="destructive" @click="startCancelOrder">Cancel</UiButton>
     </div>
-  </form>
 
-  <form class="filter-bar" @submit.prevent="load">
-    <input v-model.trim="filters.search" placeholder="PO number or supplier">
-    <select v-model="filters.approval_status">
-      <option value="">All approval states</option>
-      <option>Draft</option><option>Submitted</option><option>Approved</option><option>Rejected</option><option>Cancelled</option>
-    </select>
-    <select v-model="filters.supplier_status">
-      <option value="">All supplier statuses</option>
-      <option value="Not Sent">Not Sent</option>
-      <option value="Sent">Sent</option>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>SKU</th>
+            <th>Product</th>
+            <th>Ordered</th>
+            <th>Fulfilled</th>
+            <th>Outstanding</th>
+            <th>Current stock</th>
+            <th>Unit cost</th>
+            <th>Line total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in selected.items" :key="item.id">
+            <td>{{ item.sku }}</td>
+            <td>{{ item.product_name }}</td>
+            <td>{{ item.quantity_ordered }}</td>
+            <td>{{ item.fulfilled_quantity }}</td>
+            <td>{{ item.outstanding_quantity }}</td>
+            <td>{{ item.current_stock }}</td>
+            <td>{{ formatMoney(item.unit_cost) }}</td>
+            <td>{{ formatMoney(item.line_total) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </UiSectionCard>
+
+  <UiConfirmDialog
+    :open="!!review"
+    :title="`${review?.decision} purchase order`"
+    :description="review?.summary"
+    :confirm-label="`Confirm ${review?.decision}`"
+    :destructive="review?.decision === 'Rejected'"
+    :loading="submitting"
+    loading-label="Saving"
+    @confirm="confirmReview"
+    @cancel="dismissReview"
+  >
+    <UiInput
+      v-model="reviewNote"
+      label="Review note"
+      maxlength="500"
+      hint="Optional. This note will be recorded with this action."
+    />
+    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+  </UiConfirmDialog>
+
+  <UiConfirmDialog
+    :open="cancelDialogOpen"
+    title="Cancel purchase order"
+    :description="selected ? `${selected.order.po_number} — ${selected.order.supplier_name}` : ''"
+    confirm-label="Confirm cancel"
+    destructive
+    :loading="submitting"
+    loading-label="Saving"
+    @confirm="confirmCancelOrder"
+    @cancel="dismissCancelOrder"
+  >
+    <UiInput
+      v-model="cancelNote"
+      label="Cancellation note"
+      maxlength="500"
+      hint="Optional. This note will be recorded with this action."
+    />
+    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+  </UiConfirmDialog>
+
+  <UiConfirmDialog
+    :open="sendDialogOpen"
+    title="Mark sent to supplier"
+    :description="selected ? `${selected.order.po_number} — ${selected.order.supplier_name}` : ''"
+    confirm-label="Confirm send"
+    :loading="submitting"
+    loading-label="Saving"
+    @confirm="confirmSend"
+    @cancel="sendDialogOpen = false"
+  >
+    <p class="field-help">This marks the order as sent to the supplier. This can't be undone from here.</p>
+    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+  </UiConfirmDialog>
+
+  <UiConfirmDialog
+    :open="responseForm.open"
+    title="Record supplier response"
+    :description="selected ? `${selected.order.po_number} — ${selected.order.supplier_name}` : ''"
+    confirm-label="Save response"
+    :loading="submitting"
+    loading-label="Saving"
+    @confirm="submitResponse"
+    @cancel="responseForm.open = false"
+  >
+    <UiSelect v-model="responseForm.response" label="Decision" required>
       <option value="Accepted">Accepted</option>
       <option value="Rejected">Rejected</option>
-    </select>
-    <select v-model="filters.status">
-      <option value="">All receiving states</option>
-      <option>Pending</option><option>Approved</option><option>Ordered</option>
-      <option>Partially Received</option><option>Fully Received</option><option>Cancelled</option>
-    </select>
-    <button class="secondary-button">Apply filters</button>
-  </form>
-
-  <WorkspaceTable
-    :columns="[
-      { key: 'po_number', label: 'PO number' },
-      { key: 'supplier_name', label: 'Supplier' },
-      { key: 'total_amount', label: 'Total' },
-      { key: 'approval_status', label: 'Approval' },
-      { key: 'supplier_status', label: 'Supplier status' },
-      { key: 'status', label: 'Receiving' },
-      { key: 'total_fulfilled', label: 'Fulfillment' },
-      { key: 'expected_delivery_date', label: 'Expected' }
-    ]"
-    :rows="orders"
-  >
-    <template #cell-total_amount="{ row }">{{ formatMoney(row.total_amount) }}</template>
-    <template #cell-approval_status="{ row }"><span class="status-badge">{{ row.approval_status }}</span></template>
-    <template #cell-supplier_status="{ row }"><span class="status-badge">{{ supplierStatusText(row.supplier_status) }}</span></template>
-    <template #cell-status="{ row }"><span class="status-badge">{{ row.status }}</span></template>
-    <template #cell-total_fulfilled="{ row }">{{ row.total_fulfilled }} / {{ row.total_ordered }}</template>
-    <template #actions="{ row }"><button @click="open(row.id)">Details</button></template>
-  </WorkspaceTable>
-
-  <section v-if="selected" class="detail-panel">
-    <div class="detail-heading">
-      <div>
-        <h2>{{ selected.order.po_number }}</h2>
-        <p>{{ selected.order.supplier_name }} · Server total {{ formatMoney(selected.order.total_amount) }}</p>
-        <p class="field-help">
-          Supplier state: <strong>{{ supplierStatusText(selected.order.supplier_status) }}</strong>
-          <span v-if="selected.order.sent_by"> · Sent by {{ selected.order.sent_by }} at {{ selected.order.sent_to_supplier_at }}</span>
-          <span v-if="selected.order.supplier_responded_at"> · Responded at {{ selected.order.supplier_responded_at }}</span>
-          <span v-if="selected.order.supplier_reference"> · Ref #{{ selected.order.supplier_reference }}</span>
-        </p>
-        <p v-if="selected.order.supplier_response_notes" class="field-help">
-          Response notes: {{ selected.order.supplier_response_notes }}
-        </p>
-      </div>
-      <div class="form-actions">
-        <button
-          v-if="sessionStore.can('procurement.purchase_orders.manage') && selected.order.approval_status === 'Draft'"
-          class="secondary-button"
-          @click="editSelected"
-        >Edit</button>
-        <button
-          v-if="sessionStore.can('procurement.purchase_orders.manage') && selected.order.approval_status === 'Draft'"
-          class="primary-button"
-          @click="transition('submit')"
-        >Submit</button>
-        <button
-          v-if="sessionStore.can('procurement.purchase_orders.approve') && selected.order.approval_status === 'Submitted'"
-          class="primary-button"
-          @click="transition('review', { decision: 'Approved', notes: actionNotes || null })"
-        >Approve</button>
-        <button
-          v-if="sessionStore.can('procurement.purchase_orders.approve') && selected.order.approval_status === 'Submitted'"
-          class="secondary-button danger-button"
-          @click="transition('review', { decision: 'Rejected', notes: actionNotes || null })"
-        >Reject</button>
-        <button
-          v-if="canMarkSent"
-          class="primary-button"
-          @click="markSent"
-        >Mark Sent to Supplier</button>
-        <button
-          v-if="canRecordResponse"
-          class="primary-button"
-          @click="openResponseModal"
-        >Record Supplier Response</button>
-        <button
-          v-if="canCancelSelected"
-          class="secondary-button"
-          @click="transition('cancel', { notes: actionNotes || null })"
-        >Cancel</button>
-      </div>
-    </div>
-    <label class="review-notes">Action notes<input v-model.trim="actionNotes" maxlength="500"></label>
-
-    <div v-if="responseForm.open" class="management-form modal-box">
-      <h3>Record Supplier Response</h3>
-      <div class="form-grid">
-        <label>
-          Decision
-          <select v-model="responseForm.response" required>
-            <option value="Accepted">Accepted</option>
-            <option value="Rejected">Rejected</option>
-          </select>
-        </label>
-        <label>
-          Supplier Reference #
-          <input v-model.trim="responseForm.supplier_reference" placeholder="e.g. SO-98765" maxlength="100">
-        </label>
-        <label>
-          Expected Delivery Date
-          <input v-model="responseForm.expected_delivery_date" type="date">
-        </label>
-        <label class="full-field">
-          Response Notes
-          <textarea v-model.trim="responseForm.notes" rows="2" maxlength="1000" placeholder="Vendor communication notes..."></textarea>
-        </label>
-      </div>
-      <div class="form-actions">
-        <button class="primary-button" type="button" @click="submitResponse">Save response</button>
-        <button class="secondary-button" type="button" @click="responseForm.open = false">Cancel</button>
-      </div>
-    </div>
-
-    <WorkspaceTable
-      :columns="[
-        { key: 'sku', label: 'SKU' },
-        { key: 'product_name', label: 'Product' },
-        { key: 'quantity_ordered', label: 'Ordered' },
-        { key: 'fulfilled_quantity', label: 'Fulfilled' },
-        { key: 'outstanding_quantity', label: 'Outstanding' },
-        { key: 'current_stock', label: 'Current stock' },
-        { key: 'unit_cost', label: 'Unit cost' },
-        { key: 'line_total', label: 'Line total' }
-      ]"
-      :rows="selected.items"
-    >
-      <template #cell-unit_cost="{ row }">{{ formatMoney(row.unit_cost) }}</template>
-      <template #cell-line_total="{ row }">{{ formatMoney(row.line_total) }}</template>
-    </WorkspaceTable>
-
-  </section>
+    </UiSelect>
+    <UiInput
+      v-model.trim="responseForm.supplier_reference"
+      label="Supplier reference #"
+      maxlength="100"
+      placeholder="e.g. SO-98765"
+    />
+    <UiInput v-model="responseForm.expected_delivery_date" type="date" label="Expected delivery date" />
+    <label class="ui-field">
+      <span class="ui-field__label">Response notes</span>
+      <textarea
+        v-model.trim="responseForm.notes"
+        class="ui-field-control"
+        rows="2"
+        maxlength="1000"
+        placeholder="Vendor communication notes..."
+      ></textarea>
+    </label>
+    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+  </UiConfirmDialog>
 </template>
 
 <style scoped>
-.danger-button {
-  background: linear-gradient(180deg, #dc2626, #b91c1c);
-  border-color: #b91c1c;
-  color: #fff;
+.po-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-4);
 }
-
-.danger-button:hover {
-  background: #991b1b;
-  border-color: #991b1b;
+.po-form__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--fm-space-5);
+}
+.po-form__span {
+  grid-column: 1 / -1;
+}
+.po-form__subheading {
+  margin: var(--fm-space-2) 0 0;
+}
+.po-line-item {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(110px, 1fr)) minmax(110px, auto) auto;
+  align-items: end;
+  gap: var(--fm-space-4);
+  padding: var(--fm-space-3) 0;
+  border-bottom: 1px solid var(--fm-color-border);
+}
+.po-line-item__total {
+  display: grid;
+  gap: 6px;
+}
+.filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+@media (max-width: 900px) {
+  .po-form__fields,
+  .po-line-item {
+    grid-template-columns: 1fr;
+  }
+  .po-form__span {
+    grid-column: auto;
+  }
 }
 </style>
