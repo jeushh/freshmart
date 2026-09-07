@@ -373,6 +373,11 @@ class BusinessController extends Controller
             'employees' => $user->hasAnyPermission('system.users.manage')
                 ? DB::table('employees')
                     ->where('employment_status', '!=', 'Terminated')
+                    ->whereNotIn('id', function ($sub) {
+                        $sub->select('employee_id')
+                            ->from('admin_users')
+                            ->whereNotNull('employee_id');
+                    })
                     ->select('id', 'employee_no', 'full_name')
                     ->orderBy('full_name')
                     ->get()
@@ -430,6 +435,30 @@ class BusinessController extends Controller
         AuditLogger::record($request, 'user.created', 'user', $id, ['username' => $data['username']]);
 
         return response()->json($this->safeUser($id), 201);
+    }
+
+    /**
+     * Admin-initiated password reset for another (or the same) account.
+     * Gated by `system.users.manage`; unlike self-service change, it does
+     * not require the target's current password, since the acting admin's
+     * own authenticated session is already the trust boundary. Every use is
+     * audit-logged against the target account.
+     */
+    public function resetUserPassword(Request $request, int $id)
+    {
+        $target = DB::table('admin_users')->where('id', $id)->first();
+        abort_unless($target, 404);
+
+        $data = $request->validate([
+            'password' => 'required|string|min:8|max:255',
+        ]);
+
+        DB::table('admin_users')->where('id', $id)->update([
+            'password_hash' => Hash::make($data['password']),
+        ]);
+        AuditLogger::record($request, 'user.password_reset', 'user', $id, ['username' => $target->username]);
+
+        return $this->safeUser($id);
     }
 
     public function self(Request $request)

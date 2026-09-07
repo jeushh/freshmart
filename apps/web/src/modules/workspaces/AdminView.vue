@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '../../api/http.js'
 import { sessionStore } from '../../stores/session.js'
 import UiButton from '../../components/ui/UiButton.vue'
+import UiConfirmDialog from '../../components/ui/UiConfirmDialog.vue'
 import UiEmptyState from '../../components/ui/UiEmptyState.vue'
 import UiErrorState from '../../components/ui/UiErrorState.vue'
 import UiInput from '../../components/ui/UiInput.vue'
@@ -26,6 +27,13 @@ const formError = ref('')
 const formErrors = ref({})
 const successMessage = ref('')
 const form = ref(emptyForm())
+
+const resetTarget = ref(null)
+const resetForm = ref({ password: '', password_confirmation: '' })
+const resetSaving = ref(false)
+const resetError = ref('')
+const resetErrors = ref({})
+const resetSuccess = ref('')
 
 const canManageUsers = computed(() => sessionStore.can('system.users.manage'))
 const canManageRoles = computed(() => sessionStore.can('system.roles.manage'))
@@ -113,6 +121,26 @@ function emptyForm() {
   }
 }
 
+const employeeById = computed(() => new Map(employees.value.map(employee => [String(employee.id), employee])))
+
+function suggestUsername(fullName) {
+  return fullName
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .join('.')
+}
+
+watch(() => form.value.employee_id, employeeId => {
+  const employee = employeeId ? employeeById.value.get(String(employeeId)) : null
+  if (!employee) return
+  form.value.full_name = employee.full_name
+  if (!form.value.username) {
+    form.value.username = suggestUsername(employee.full_name)
+  }
+})
+
 function requestMessage(requestError) {
   return requestError.requestId
     ? `${requestError.message} Reference: ${requestError.requestId}`
@@ -166,6 +194,48 @@ async function save() {
 function humanize(value) {
   if (!value) return '—'
   return String(value).replaceAll('.', ' · ').replaceAll('_', ' ')
+}
+
+function openReset(user) {
+  resetTarget.value = user
+  resetForm.value = { password: '', password_confirmation: '' }
+  resetError.value = ''
+  resetErrors.value = {}
+  resetSuccess.value = ''
+}
+
+function closeReset() {
+  if (resetSaving.value) return
+  resetTarget.value = null
+}
+
+function resetFieldError(field) {
+  return resetErrors.value[field]?.[0] || ''
+}
+
+async function submitReset() {
+  resetError.value = ''
+  resetErrors.value = {}
+  resetSuccess.value = ''
+
+  if (resetForm.value.password !== resetForm.value.password_confirmation) {
+    resetErrors.value = { password_confirmation: ['New password and confirmation do not match.'] }
+    return
+  }
+
+  resetSaving.value = true
+  try {
+    await api.post(`/workspace/users/${resetTarget.value.id}/reset-password`, {
+      password: resetForm.value.password
+    })
+    resetSuccess.value = `Password updated for ${resetTarget.value.full_name}.`
+    setTimeout(() => { resetTarget.value = null }, 900)
+  } catch (requestError) {
+    resetErrors.value = requestError.errors || {}
+    if (!Object.keys(resetErrors.value).length) resetError.value = requestMessage(requestError)
+  } finally {
+    resetSaving.value = false
+  }
 }
 
 function scrollToSection(id) {
@@ -262,11 +332,24 @@ onMounted(load)
         description="Set up sign-in details, assign a role, and optionally link an employee record."
       >
         <form class="fm-admin__form" @submit.prevent="save">
+          <UiSelect
+            v-model="form.employee_id"
+            label="Employee link"
+            :error="fieldError('employee_id')"
+            hint="Pick an existing employee to auto-fill their name below, or leave blank for a standalone account."
+            :disabled="saving"
+          >
+            <option value="">No employee link</option>
+            <option v-for="employee in employees" :key="employee.id" :value="employee.id">
+              {{ employee.employee_no }} — {{ employee.full_name }}
+            </option>
+          </UiSelect>
           <UiInput
             v-model="form.full_name"
             label="Full name"
             autocomplete="name"
             placeholder="e.g. Maria Santos"
+            hint="Auto-filled when you pick an employee above — you can still edit it."
             :error="fieldError('full_name')"
             :disabled="saving"
             required
@@ -290,18 +373,6 @@ onMounted(load)
           >
             <option value="" disabled>Select a role</option>
             <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
-          </UiSelect>
-          <UiSelect
-            v-model="form.employee_id"
-            label="Employee link"
-            :error="fieldError('employee_id')"
-            hint="Required for employee self-service accounts."
-            :disabled="saving"
-          >
-            <option value="">No employee link</option>
-            <option v-for="employee in employees" :key="employee.id" :value="employee.id">
-              {{ employee.employee_no }} — {{ employee.full_name }}
-            </option>
           </UiSelect>
           <UiInput
             v-model="form.password"
@@ -354,6 +425,7 @@ onMounted(load)
               <th scope="col">Role</th>
               <th scope="col">Status</th>
               <th scope="col">Last login</th>
+              <th scope="col"><span class="ui-sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -363,6 +435,11 @@ onMounted(load)
               <td>{{ user.role_name || '—' }}</td>
               <td><UiStatusBadge :status="user.status" /></td>
               <td>{{ formatDateTime(user.last_login) }}</td>
+              <td>
+                <UiButton variant="secondary" size="sm" @click="openReset(user)">
+                  Reset password
+                </UiButton>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -408,6 +485,40 @@ onMounted(load)
         description="Your account does not currently have access to user management or audit activity."
       />
     </template>
+
+    <UiConfirmDialog
+      :open="Boolean(resetTarget)"
+      :title="resetTarget ? `Reset password for ${resetTarget.full_name}` : 'Reset password'"
+      description="Set a new temporary password and share it with the account holder securely. This does not require their current password."
+      confirm-label="Reset password"
+      loading-label="Resetting"
+      :loading="resetSaving"
+      @confirm="submitReset"
+      @cancel="closeReset"
+    >
+      <UiInput
+        v-model="resetForm.password"
+        label="New temporary password"
+        type="password"
+        autocomplete="new-password"
+        minlength="8"
+        hint="Use at least 8 characters and share it securely."
+        :error="resetFieldError('password')"
+        :disabled="resetSaving"
+        required
+      />
+      <UiInput
+        v-model="resetForm.password_confirmation"
+        label="Confirm new password"
+        type="password"
+        autocomplete="new-password"
+        :error="resetFieldError('password_confirmation')"
+        :disabled="resetSaving"
+        required
+      />
+      <p v-if="resetError" class="fm-admin__message fm-admin__message--error" role="alert">{{ resetError }}</p>
+      <p v-else-if="resetSuccess" class="fm-admin__message fm-admin__message--success">{{ resetSuccess }}</p>
+    </UiConfirmDialog>
   </div>
 </template>
 

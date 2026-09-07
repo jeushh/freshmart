@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
+use App\Services\PositionSalaryService;
 
 class BusinessRulesTest extends TestCase
 {
@@ -147,15 +148,89 @@ class BusinessRulesTest extends TestCase
             'department' => $employee->department,
             'status' => 'active',
             'pay_type' => 'monthly',
-            'basic_salary' => $employee->basic_salary,
-            'hourly_rate' => $employee->hourly_rate,
-            'leave_balance' => $employee->leave_balance,
         ])->assertOk();
 
         $this->assertSame(
             $employee->hire_date,
             DB::table('employees')->where('id', $employee->id)->value('hire_date'),
         );
+    }
+
+    public function test_valid_department_position_combination_succeeds(): void
+    {
+        $this->actingAs(User::where('username', 'hr')->firstOrFail());
+        $this->postJson('/api/employees', [
+            'employee_code' => 'EMP-TAX-VALID',
+            'name' => 'Tax Valid Employee',
+            'status' => 'active',
+            'pay_type' => 'monthly',
+            'department' => 'Store Operations',
+            'position' => 'Cashier',
+        ])->assertCreated();
+
+        $employee = DB::table('employees')->where('employee_no', 'EMP-TAX-VALID')->first();
+        $this->assertSame('Store Operations', $employee->department);
+        $this->assertSame('Cashier', $employee->position);
+        $this->assertSame(16000.00, (float) $employee->basic_salary);
+    }
+
+    public function test_invalid_department_position_combination_is_rejected(): void
+    {
+        $this->actingAs(User::where('username', 'hr')->firstOrFail());
+        $this->postJson('/api/employees', [
+            'employee_code' => 'EMP-TAX-INV',
+            'name' => 'Tax Invalid Employee',
+            'status' => 'active',
+            'pay_type' => 'monthly',
+            'department' => 'Store Operations',
+            'position' => 'Accountant',
+        ])->assertUnprocessable();
+    }
+
+    public function test_position_from_another_department_is_rejected(): void
+    {
+        $this->actingAs(User::where('username', 'hr')->firstOrFail());
+        $this->postJson('/api/employees', [
+            'employee_code' => 'EMP-TAX-CROSS',
+            'name' => 'Cross Department Employee',
+            'status' => 'active',
+            'pay_type' => 'monthly',
+            'department' => 'Finance & Accounting',
+            'position' => 'Cashier',
+        ])->assertUnprocessable();
+    }
+
+    public function test_salary_is_derived_from_position(): void
+    {
+        $this->actingAs(User::where('username', 'hr')->firstOrFail());
+        $this->postJson('/api/employees', [
+            'employee_code' => 'EMP-TAX-SAL',
+            'name' => 'Salary Derived Employee',
+            'status' => 'active',
+            'pay_type' => 'monthly',
+            'department' => 'Finance & Accounting',
+            'position' => 'Accountant',
+        ])->assertCreated();
+
+        $employee = DB::table('employees')->where('employee_no', 'EMP-TAX-SAL')->first();
+        $this->assertSame(30000.00, (float) $employee->basic_salary);
+    }
+
+    public function test_malicious_client_supplied_salary_cannot_override_fixed_salary(): void
+    {
+        $this->actingAs(User::where('username', 'hr')->firstOrFail());
+        $this->postJson('/api/employees', [
+            'employee_code' => 'EMP-TAX-OVERRIDE',
+            'name' => 'Override Employee',
+            'status' => 'active',
+            'pay_type' => 'monthly',
+            'department' => 'Store Operations',
+            'position' => 'Cashier',
+            'basic_salary' => 999999,
+        ])->assertCreated();
+
+        $employee = DB::table('employees')->where('employee_no', 'EMP-TAX-OVERRIDE')->first();
+        $this->assertSame(16000.00, (float) $employee->basic_salary);
     }
 
     public function test_payroll_requires_valid_transitions_and_posts_one_ledger_entry(): void

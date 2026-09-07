@@ -58,15 +58,15 @@ class PayrollController extends Controller
             : $employee->basic_salary / 2;
 
         // Ordinary OT (beyond 8h on an ordinary working day): 1.25x hourly_rate.
-        $overtime = $data['overtime_hours'] * $employee->hourly_rate * 1.25;
         // Rest day / special (non-working) day OT: 1.69x hourly_rate (130% day rate x 130% OT premium).
-        $restDayOt = ($data['rest_day_ot_hours'] ?? 0) * $employee->hourly_rate * 1.69;
-        $specialDayOt = ($data['special_day_ot_hours'] ?? 0) * $employee->hourly_rate * 1.69;
         // Regular holiday OT: 2.60x hourly_rate (200% day rate x 130% OT premium).
-        $holidayOt = ($data['holiday_ot_hours'] ?? 0) * $employee->hourly_rate * 2.60;
         // NOTE (V1 scope): combined day types (special/holiday falling on a rest
         // day, at 1.95x / 3.38x) and night-shift differential are not covered by
         // these four buckets — see the migration docblock for the full list.
+        $overtime = $data['overtime_hours'] * $employee->hourly_rate * 1.25;
+        $restDayOt = ($data['rest_day_ot_hours'] ?? 0) * $employee->hourly_rate * 1.69;
+        $specialDayOt = ($data['special_day_ot_hours'] ?? 0) * $employee->hourly_rate * 1.69;
+        $holidayOt = ($data['holiday_ot_hours'] ?? 0) * $employee->hourly_rate * 2.60;
         $totalOvertimePay = $overtime + $restDayOt + $specialDayOt + $holidayOt;
 
         $net = $basic + $totalOvertimePay + ($data['allowances'] ?? 0) + ($data['bonuses'] ?? 0) - ($data['deductions'] ?? 0);

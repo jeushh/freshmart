@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BusinessController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\FinancePurchaseOrderLookupController;
 use App\Http\Controllers\Api\HrRequestController;
@@ -24,6 +25,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
+    Route::post('/me/password', [AuthController::class, 'changePassword'])->middleware('throttle:10,1');
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/dashboard', DashboardController::class);
 
@@ -32,6 +34,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/employees', [EmployeeController::class, 'store'])->middleware('permission:hr.employees.edit');
     Route::match(['put', 'patch'], '/employees/{employee}', [EmployeeController::class, 'update'])->middleware('permission:hr.employees.edit');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->middleware('permission:hr.employees.edit');
+
+    Route::get('/departments', [DepartmentController::class, 'index']);
+    Route::get('/departments/{department}/positions', [DepartmentController::class, 'positions']);
 
     Route::get('/attendance', [AttendanceController::class, 'index'])->middleware('permission:hr.attendance.view');
     Route::post('/attendance', [AttendanceController::class, 'store'])->middleware('permission:hr.attendance.edit');
@@ -78,6 +83,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:system.users.manage|system.roles.manage|system.audit.view|system.settings.manage');
     Route::post('/workspace/users', [BusinessController::class, 'saveUser'])->middleware('permission:system.users.manage');
     Route::put('/workspace/users/{id}', [BusinessController::class, 'saveUser'])->middleware('permission:system.users.manage');
+    Route::post('/workspace/users/{id}/reset-password', [BusinessController::class, 'resetUserPassword'])->middleware('permission:system.users.manage');
 
     Route::get('/roles', [RoleController::class, 'index'])->middleware('permission:system.roles.manage');
     Route::post('/roles', [RoleController::class, 'store'])->middleware('permission:system.roles.manage');

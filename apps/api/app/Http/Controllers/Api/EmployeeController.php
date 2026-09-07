@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditLogger;
+use App\Services\PositionSalaryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,7 @@ class EmployeeController extends Controller
         $data = $request->validate([
             'search' => 'sometimes|string|max:120',
             'per_page' => 'sometimes|integer|min:1|max:100',
+            'department' => 'sometimes|string|max:80',
         ]);
         $query = DB::table('employees');
 
@@ -22,6 +24,10 @@ class EmployeeController extends Controller
             $query->where(fn ($item) => $item
                 ->where('full_name', 'like', "%{$search}%")
                 ->orWhere('employee_no', 'like', "%{$search}%"));
+        }
+
+        if ($data['department'] ?? false) {
+            $query->where('department', $data['department']);
         }
 
         return $query->orderBy('full_name')->paginate($data['per_page'] ?? 20);
@@ -65,32 +71,47 @@ class EmployeeController extends Controller
             'employee_code' => ['required', 'string', 'max:40', Rule::unique('employees', 'employee_no')->ignore($id)],
             'name' => 'required|string|max:120',
             'email' => 'nullable|email|max:255',
-            'phone' => 'nullable|string|max:40',
-            'position' => 'nullable|string|max:80',
+            'phone' => ['nullable', 'string', function ($attribute, $value, $fail) {
+                $digits = preg_replace('/[^0-9+]/', '', $value);
+                if (! preg_match('/^(09\d{9}|\+639\d{9})$/', $digits)) {
+                    $fail('Phone must be a valid Philippine mobile number, e.g. 09171234567 or 0917-123-4567.');
+                }
+            }],
             'department' => 'nullable|string|max:80',
+            'position' => 'nullable|string|max:80',
             'hire_date' => $id === null ? 'nullable|date' : 'sometimes|date',
             'status' => 'required|in:active,on_leave,terminated',
             'pay_type' => 'required|in:monthly,hourly',
-            'basic_salary' => 'nullable|numeric|min:0',
-            'hourly_rate' => 'nullable|numeric|min:0',
             'leave_balance' => 'nullable|numeric|min:0',
         ]);
+
+        $department = $data['department'] ?? '';
+        $position = $data['position'] ?? '';
+
+        abort_if(
+            $department !== '' && !PositionSalaryService::isValidCombination($department, $position),
+            422,
+            'Invalid department/position combination.',
+        );
+
+        $basicSalary = PositionSalaryService::getPositionSalary($position);
+        abort_if($basicSalary === null, 422, 'Invalid position.');
 
         $record = [
             'employee_no' => $data['employee_code'],
             'full_name' => $data['name'],
             'email' => $data['email'] ?? null,
             'phone' => $data['phone'] ?? null,
-            'position' => ($data['position'] ?? null) ?: 'Staff',
-            'department' => ($data['department'] ?? null) ?: 'General',
+            'position' => $position ?: 'Cashier',
+            'department' => $department ?: 'Store Operations',
             'employment_status' => [
                 'active' => 'Active',
                 'on_leave' => 'On Leave',
                 'terminated' => 'Terminated',
             ][$data['status']],
             'pay_type' => $data['pay_type'] === 'hourly' ? 'Hourly' : 'Monthly',
-            'basic_salary' => $data['basic_salary'] ?? 0,
-            'hourly_rate' => $data['hourly_rate'] ?? 0,
+            'basic_salary' => $basicSalary,
+            'hourly_rate' => $data['pay_type'] === 'hourly' ? $basicSalary / 160 : 0,
             'leave_balance' => $data['leave_balance'] ?? 15,
         ];
 

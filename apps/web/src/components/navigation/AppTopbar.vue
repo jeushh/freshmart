@@ -1,10 +1,12 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useLogout } from '../../composables/useLogout.js'
 import { sessionStore } from '../../stores/session.js'
+import ChangePasswordDialog from '../account/ChangePasswordDialog.vue'
 import UiDropdownMenu from '../ui/UiDropdownMenu.vue'
 
 const { logout, signingOut } = useLogout()
+const showChangePassword = ref(false)
 
 const workspaceLabels = {
   admin: 'Administration',
@@ -38,6 +40,11 @@ const userMenuItems = computed(() => [
     disabled: true
   },
   {
+    key: 'change-password',
+    label: 'Change password',
+    separatorBefore: true
+  },
+  {
     key: 'logout',
     label: signingOut.value ? 'Signing out' : 'Sign out',
     destructive: true,
@@ -48,6 +55,7 @@ const userMenuItems = computed(() => [
 
 function onMenuSelect(item) {
   if (item.key === 'logout') logout()
+  if (item.key === 'change-password') showChangePassword.value = true
 }
 </script>
 
@@ -77,12 +85,18 @@ function onMenuSelect(item) {
           <small>{{ workspaceLabel }} · @{{ username }}</small>
         </span>
         <span v-else class="fm-topbar__menu-action">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
+          <svg v-if="item.key === 'change-password'" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="9" rx="2" />
+            <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" aria-hidden="true">
             <path d="M10 5H5v14h5M14 8l4 4-4 4m4-4H9" />
           </svg>
           {{ item.label }}
         </span>
       </template>
     </UiDropdownMenu>
+
+    <ChangePasswordDialog :open="showChangePassword" @close="showChangePassword = false" />
   </div>
 </template>

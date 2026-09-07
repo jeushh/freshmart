@@ -123,8 +123,12 @@ class AttendancePaginationTest extends TestCase
         return DB::table('employees')->insertGetId([
             'employee_no' => "PAGE-{$suffix}",
             'full_name' => "Pagination {$suffix}",
-            'position' => 'Test Analyst',
-            'department' => 'Human Resources',
+            'position' => 'Cashier',
+            'department' => 'Store Operations',
+            'department_id' => DB::table('departments')->where('name', 'Store Operations')->value('id'),
+            'position_id' => DB::table('positions')->where('name', 'Cashier')->value('id'),
+            'basic_salary' => 16000,
+            'hourly_rate' => 100,
             'hire_date' => '2040-01-01',
         ]);
     }

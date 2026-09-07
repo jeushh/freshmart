@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AuditLogger;
 use App\Services\SystemSettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -55,5 +56,38 @@ class AuthController extends Controller
         $r->session()->regenerateToken();
 
         return response()->noContent();
+    }
+
+    /**
+     * Self-service password change. Any authenticated user (staff, cashier,
+     * or admin) can change their own password, provided they can prove they
+     * know the current one. This intentionally requires no special
+     * permission—every account owns its own credentials.
+     */
+    public function changePassword(Request $r)
+    {
+        $u = $r->user();
+        abort_unless($u, 401);
+
+        $d = $r->validate([
+            'current_password' => ['required', 'string', 'max:255'],
+            'password' => ['required', 'string', 'min:8', 'max:255', 'confirmed'],
+        ]);
+
+        if (! Hash::check($d['current_password'], $u->password_hash)) {
+            throw ValidationException::withMessages(['current_password' => ['Current password is incorrect.']]);
+        }
+
+        if (Hash::check($d['password'], $u->password_hash)) {
+            throw ValidationException::withMessages(['password' => ['New password must be different from your current password.']]);
+        }
+
+        $u->update(['password_hash' => Hash::make($d['password'])]);
+        if ($r->hasSession()) {
+            $r->session()->regenerate();
+        }
+        AuditLogger::record($r, 'user.password_changed', 'user', $u->id, ['username' => $u->username]);
+
+        return response()->json(['message' => 'Your password has been updated.']);
     }
 }

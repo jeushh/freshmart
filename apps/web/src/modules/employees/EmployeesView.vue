@@ -15,6 +15,7 @@ import {
   UiTableShell
 } from '../../components/ui/index.js'
 import { formatDateTime, formatMoney, formatNumber } from '../../utils/formatters.js'
+import { PositionSalaryService } from '../../services/PositionSalaryService.js'
 
 const canEdit = computed(() => sessionStore.can('hr.employees.edit'))
 
@@ -40,10 +41,55 @@ const statusOptions = [
   { value: 'Terminated', label: 'Terminated' }
 ]
 
-const departmentOptions = computed(() => {
+const departmentOptions = ref([])
+const positionOptions = ref([])
+const loadingDepartments = ref(false)
+const loadingPositions = ref(false)
+
+async function loadDepartments() {
+  loadingDepartments.value = true
+  try {
+    const data = await api.get('/departments')
+    departmentOptions.value = data.map(d => ({ value: d.name, label: d.name }))
+  } catch {
+    // fallback handled by populateFromRows
+  } finally {
+    loadingDepartments.value = false
+  }
+}
+
+async function loadPositions(department) {
+  loadingPositions.value = true
+  positionOptions.value = []
+  if (!department) {
+    loadingPositions.value = false
+    return
+  }
+  try {
+    const positions = PositionSalaryService.getDepartmentPositions(department)
+    positionOptions.value = positions
+  } catch {
+    // fallback: fetch from API
+  } finally {
+    loadingPositions.value = false
+  }
+}
+
+watch(
+  () => form.value.department,
+  async (newDepartment, oldDepartment) => {
+    if (newDepartment === oldDepartment) return
+    const previousPosition = form.value.position
+    await loadPositions(newDepartment)
+    const stillValid = positionOptions.value.some(p => p.value === previousPosition)
+    form.value.position = stillValid ? previousPosition : ''
+  }
+)
+
+function populateFromRows() {
   const values = new Set(rows.value.map(row => row.department).filter(Boolean))
-  return Array.from(values).sort()
-})
+  departmentOptions.value = Array.from(values).sort().map(v => ({ value: v, label: v }))
+}
 
 const filteredRows = computed(() => rows.value.filter(row => {
   if (departmentFilter.value && row.department !== departmentFilter.value) return false
@@ -52,6 +98,24 @@ const filteredRows = computed(() => rows.value.filter(row => {
 }))
 
 const selectedEmployee = computed(() => rows.value.find(row => row.id === selectedId.value) || null)
+
+const selectedPositionSalary = computed(() => {
+  if (!form.value.department || !form.value.position) return 0
+  if (form.value.pay_type === 'hourly') {
+    return PositionSalaryService.getPositionHourlyRate?.(form.value.position) ?? 0
+  }
+  const pos = positionOptions.value.find(p => p.value === form.value.position)
+  if (pos) return pos.salary ?? 0
+  return PositionSalaryService.getPositionSalary(form.value.position) ?? 0
+})
+
+const selectedPositionSalaryLabel = computed(() =>
+  form.value.pay_type === 'hourly' ? 'Hourly Rate' : 'Basic Salary'
+)
+
+const selectedPositionSalaryPeriod = computed(() =>
+  form.value.pay_type === 'hourly' ? '/ hour' : '/ month'
+)
 
 function emptyForm() {
   return {
@@ -133,6 +197,7 @@ function editEmployee(row) {
 
 function cancelEdit() {
   form.value = emptyForm()
+  positionOptions.value = []
   formError.value = ''
   formErrors.value = {}
   successMessage.value = ''
@@ -150,6 +215,8 @@ async function load(showLoading = true) {
     if (selectedId.value && !rows.value.some(row => row.id === selectedId.value)) {
       selectedId.value = null
     }
+    populateFromRows()
+    await loadDepartments()
   } catch (requestError) {
     loadError.value = requestMessage(requestError)
   } finally {
@@ -172,14 +239,18 @@ async function save() {
   const editingId = form.value.id
 
   try {
+    const payload = { ...form.value }
+    delete payload.basic_salary
+    delete payload.hourly_rate
     if (editingId) {
-      await api.put(`/employees/${editingId}`, form.value)
+      await api.put(`/employees/${editingId}`, payload)
       successMessage.value = `${savedName} has been updated.`
     } else {
-      await api.post('/employees', form.value)
+      await api.post('/employees', payload)
       successMessage.value = `${savedName} has been added.`
     }
     form.value = emptyForm()
+    positionOptions.value = []
     await load(false)
   } catch (requestError) {
     formError.value = requestMessage(requestError)
@@ -367,32 +438,40 @@ onMounted(load)
 
           <fieldset class="fm-employees__fieldset">
             <legend>Employment information</legend>
-            <UiInput v-model="form.department" label="Department" placeholder="e.g. Sales" :error="fieldError('department')" :disabled="saving" />
-            <UiInput v-model="form.position" label="Position" placeholder="e.g. Cashier" :error="fieldError('position')" :disabled="saving" />
+            <UiSelect
+              v-model="form.department"
+              label="Department"
+              :disabled="saving"
+              :error="fieldError('department')"
+              :loading="loadingDepartments"
+            >
+              <option value="">Select department</option>
+              <option v-for="dept in departmentOptions" :key="dept.value" :value="dept.value">{{ dept.label }}</option>
+            </UiSelect>
+            <UiSelect
+              v-model="form.position"
+              label="Position"
+              :disabled="saving || !form.department"
+              :error="fieldError('position')"
+              :loading="loadingPositions"
+            >
+              <option value="">Select position</option>
+              <option v-for="pos in positionOptions" :key="pos.value" :value="pos.value">{{ pos.label }}</option>
+            </UiSelect>
+            <div v-if="form.department && form.position" class="ui-field">
+              <span class="ui-field__label">{{ selectedPositionSalaryLabel }}</span>
+              <span class="ui-field__control-wrap">
+                <span class="ui-field-control fm-employees__salary-display">
+                  {{ formatMoney(selectedPositionSalary) }}
+                  <span class="fm-employees__salary-period">{{ selectedPositionSalaryPeriod }}</span>
+                </span>
+              </span>
+            </div>
             <UiSelect v-model="form.pay_type" label="Pay type" :disabled="saving">
               <option value="monthly">Monthly</option>
               <option value="hourly">Hourly</option>
             </UiSelect>
-            <UiInput
-              v-if="form.pay_type === 'monthly'"
-              v-model.number="form.basic_salary"
-              type="number"
-              min="0"
-              step="0.01"
-              label="Basic salary"
-              :error="fieldError('basic_salary')"
-              :disabled="saving"
-            />
-            <UiInput
-              v-else
-              v-model.number="form.hourly_rate"
-              type="number"
-              min="0"
-              step="0.01"
-              label="Hourly rate"
-              :error="fieldError('hourly_rate')"
-              :disabled="saving"
-            />
+
             <UiInput
               v-model.number="form.leave_balance"
               type="number"
@@ -533,6 +612,21 @@ onMounted(load)
   text-align: right;
 }
 
+.fm-employees__salary-display {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--fm-color-slate-50);
+  color: var(--fm-color-text);
+  font-weight: var(--fm-font-weight-semibold);
+  cursor: default;
+}
+
+.fm-employees__salary-period {
+  font-weight: var(--fm-font-weight-normal);
+  color: var(--fm-color-text-muted);
+}
+
 .fm-employees__identity {
   display: flex;
   align-items: center;
@@ -627,6 +721,7 @@ onMounted(load)
 .fm-employees__fieldset {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  align-items: start;
   gap: var(--fm-space-5);
   margin: 0;
   padding: 0;

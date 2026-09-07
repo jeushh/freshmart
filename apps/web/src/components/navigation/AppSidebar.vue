@@ -107,8 +107,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       <RouterLink class="fm-sidebar__brand" :to="homePath" aria-label="FreshMart workspace home">
         <span class="fm-sidebar__brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none">
-            <path d="M5 9h14l-1 11H6L5 9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
-            <path d="M9 9a3 3 0 0 1 6 0M8 13h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <path d="M12 20c-4-1-7-5-6-10 1-4 5-6 9-5 3 5 1 12-3 15Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+            <path d="M12 20c0-5 1-9 4-12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
           </svg>
         </span>
         <span class="fm-sidebar__brand-copy">
