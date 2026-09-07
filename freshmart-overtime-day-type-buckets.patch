@@ -1,0 +1,304 @@
+diff --git a/apps/api/app/Http/Controllers/Api/PayrollController.php b/apps/api/app/Http/Controllers/Api/PayrollController.php
+index d0208d5..c09a4af 100644
+--- a/apps/api/app/Http/Controllers/Api/PayrollController.php
++++ b/apps/api/app/Http/Controllers/Api/PayrollController.php
+@@ -41,6 +41,9 @@ class PayrollController extends Controller
+             'pay_period_end' => 'required|date|after_or_equal:pay_period_start',
+             'regular_hours' => 'required|numeric|min:0',
+             'overtime_hours' => 'required|numeric|min:0',
++            'rest_day_ot_hours' => 'nullable|numeric|min:0',
++            'special_day_ot_hours' => 'nullable|numeric|min:0',
++            'holiday_ot_hours' => 'nullable|numeric|min:0',
+             'allowances' => 'nullable|numeric|min:0',
+             'bonuses' => 'nullable|numeric|min:0',
+             'deductions' => 'nullable|numeric|min:0',
+@@ -52,14 +55,29 @@ class PayrollController extends Controller
+         $basic = $employee->pay_type === 'Hourly'
+             ? $data['regular_hours'] * $employee->hourly_rate
+             : $employee->basic_salary / 2;
++
++        // Ordinary OT (beyond 8h on an ordinary working day): 1.25x hourly_rate.
+         $overtime = $data['overtime_hours'] * $employee->hourly_rate * 1.25;
+-        $net = $basic + $overtime + ($data['allowances'] ?? 0) + ($data['bonuses'] ?? 0) - ($data['deductions'] ?? 0);
++        // Rest day / special (non-working) day OT: 1.69x hourly_rate (130% day rate x 130% OT premium).
++        $restDayOt = ($data['rest_day_ot_hours'] ?? 0) * $employee->hourly_rate * 1.69;
++        $specialDayOt = ($data['special_day_ot_hours'] ?? 0) * $employee->hourly_rate * 1.69;
++        // Regular holiday OT: 2.60x hourly_rate (200% day rate x 130% OT premium).
++        $holidayOt = ($data['holiday_ot_hours'] ?? 0) * $employee->hourly_rate * 2.60;
++        // NOTE (V1 scope): combined day types (special/holiday falling on a rest
++        // day, at 1.95x / 3.38x) and night-shift differential are not covered by
++        // these four buckets — see the migration docblock for the full list.
++        $totalOvertimePay = $overtime + $restDayOt + $specialDayOt + $holidayOt;
++
++        $net = $basic + $totalOvertimePay + ($data['allowances'] ?? 0) + ($data['bonuses'] ?? 0) - ($data['deductions'] ?? 0);
+         abort_if($net < 0, 422, 'Deductions cannot exceed gross pay.');
+ 
+         $id = DB::table('payroll')->insertGetId($data + [
+             'basic_salary' => round($basic, 2),
+             'hourly_rate' => $employee->hourly_rate,
+             'overtime_pay' => round($overtime, 2),
++            'rest_day_ot_pay' => round($restDayOt, 2),
++            'special_day_ot_pay' => round($specialDayOt, 2),
++            'holiday_ot_pay' => round($holidayOt, 2),
+             'net_pay' => round($net, 2),
+             'status' => 'Draft',
+             'created_by' => $request->user()->username,
+diff --git a/apps/api/app/Models/Payroll.php b/apps/api/app/Models/Payroll.php
+index c7594ea..8c0dd3f 100644
+--- a/apps/api/app/Models/Payroll.php
++++ b/apps/api/app/Models/Payroll.php
+@@ -16,6 +16,12 @@ class Payroll extends Model
+         'basic_salary' => 'decimal:2',
+         'hourly_rate' => 'decimal:2',
+         'overtime_pay' => 'decimal:2',
++        'rest_day_ot_hours' => 'decimal:2',
++        'rest_day_ot_pay' => 'decimal:2',
++        'special_day_ot_hours' => 'decimal:2',
++        'special_day_ot_pay' => 'decimal:2',
++        'holiday_ot_hours' => 'decimal:2',
++        'holiday_ot_pay' => 'decimal:2',
+         'allowances' => 'decimal:2',
+         'bonuses' => 'decimal:2',
+         'deductions' => 'decimal:2',
+diff --git a/apps/api/database/migrations/2026_09_06_000002_add_day_type_overtime_to_payroll.php b/apps/api/database/migrations/2026_09_06_000002_add_day_type_overtime_to_payroll.php
+new file mode 100644
+index 0000000..a2dc192
+--- /dev/null
++++ b/apps/api/database/migrations/2026_09_06_000002_add_day_type_overtime_to_payroll.php
+@@ -0,0 +1,70 @@
++<?php
++
++use Illuminate\Database\Migrations\Migration;
++use Illuminate\Support\Facades\DB;
++
++/**
++ * V1 pragmatic day-type overtime support (per DEVELOPMENT_LOG V58/V59).
++ *
++ * `overtime_hours` / `overtime_pay` remain "Ordinary OT" (worked beyond 8h on an
++ * ordinary working day), unchanged, still at 1.25x hourly_rate.
++ *
++ * Three new buckets are added for OT worked on other statutory day types, each
++ * manually entered and each computed server-side at its correct multiplier:
++ *   - rest_day_ot_hours / rest_day_ot_pay       -> 1.69x hourly_rate
++ *   - special_day_ot_hours / special_day_ot_pay -> 1.69x hourly_rate
++ *   - holiday_ot_hours / holiday_ot_pay         -> 2.60x hourly_rate
++ *
++ * Known V1 scope limits (not covered by this migration or the buckets above):
++ *   - Combined day types (special day falling on rest day = 1.95x, regular
++ *     holiday falling on rest day = 3.38x) are not distinguished; work on those
++ *     days must currently be recorded under one of the four buckets above and
++ *     will be paid at that bucket's rate rather than the combined rate.
++ *   - Night shift differential (10PM-6AM, x1.10 multiplicative) is not applied
++ *     to any bucket yet.
++ *   - The statutory day-rate premium for the first 8 *regular* (non-OT) hours
++ *     worked on a rest/special/holiday day is not captured — only the OT
++ *     portion beyond 8h is bucketed here, consistent with this item's original
++ *     "overtime calculation" scope.
++ * These are flagged as follow-up items, not silently dropped.
++ */
++return new class extends Migration
++{
++    public function up(): void
++    {
++        DB::statement(
++            'ALTER TABLE payroll ADD COLUMN rest_day_ot_hours REAL NOT NULL DEFAULT 0 '
++            .'CHECK (rest_day_ot_hours >= 0)'
++        );
++        DB::statement(
++            'ALTER TABLE payroll ADD COLUMN rest_day_ot_pay REAL NOT NULL DEFAULT 0 '
++            .'CHECK (rest_day_ot_pay >= 0)'
++        );
++        DB::statement(
++            'ALTER TABLE payroll ADD COLUMN special_day_ot_hours REAL NOT NULL DEFAULT 0 '
++            .'CHECK (special_day_ot_hours >= 0)'
++        );
++        DB::statement(
++            'ALTER TABLE payroll ADD COLUMN special_day_ot_pay REAL NOT NULL DEFAULT 0 '
++            .'CHECK (special_day_ot_pay >= 0)'
++        );
++        DB::statement(
++            'ALTER TABLE payroll ADD COLUMN holiday_ot_hours REAL NOT NULL DEFAULT 0 '
++            .'CHECK (holiday_ot_hours >= 0)'
++        );
++        DB::statement(
++            'ALTER TABLE payroll ADD COLUMN holiday_ot_pay REAL NOT NULL DEFAULT 0 '
++            .'CHECK (holiday_ot_pay >= 0)'
++        );
++    }
++
++    public function down(): void
++    {
++        DB::statement('ALTER TABLE payroll DROP COLUMN holiday_ot_pay');
++        DB::statement('ALTER TABLE payroll DROP COLUMN holiday_ot_hours');
++        DB::statement('ALTER TABLE payroll DROP COLUMN special_day_ot_pay');
++        DB::statement('ALTER TABLE payroll DROP COLUMN special_day_ot_hours');
++        DB::statement('ALTER TABLE payroll DROP COLUMN rest_day_ot_pay');
++        DB::statement('ALTER TABLE payroll DROP COLUMN rest_day_ot_hours');
++    }
++};
+diff --git a/apps/api/tests/Feature/PayrollOvertimeCalculationTest.php b/apps/api/tests/Feature/PayrollOvertimeCalculationTest.php
+new file mode 100644
+index 0000000..31d5f14
+--- /dev/null
++++ b/apps/api/tests/Feature/PayrollOvertimeCalculationTest.php
+@@ -0,0 +1,61 @@
++<?php
++
++namespace Tests\Feature;
++
++use App\Models\User;
++use Illuminate\Support\Facades\DB;
++use Tests\TestCase;
++
++class PayrollOvertimeCalculationTest extends TestCase
++{
++    public function test_day_type_overtime_buckets_use_correct_statutory_multipliers(): void
++    {
++        $this->actingAs(User::where('username', 'admin')->firstOrFail());
++
++        // EMP-0001 (seeded): pay_type Monthly, basic_salary 20000, hourly_rate 120.
++        $employeeId = DB::table('employees')->where('employee_no', 'EMP-0001')->value('id');
++
++        $response = $this->postJson('/api/payroll', [
++            'employee_id' => $employeeId,
++            'pay_period_start' => '2026-08-16',
++            'pay_period_end' => '2026-08-31',
++            'regular_hours' => 88,
++            'overtime_hours' => 2,       // Ordinary OT: 2 x 120 x 1.25   = 300.00
++            'rest_day_ot_hours' => 3,    // Rest day OT: 3 x 120 x 1.69   = 608.40
++            'special_day_ot_hours' => 1, // Special day OT: 1 x 120 x 1.69 = 202.80
++            'holiday_ot_hours' => 4,     // Holiday OT: 4 x 120 x 2.60    = 1248.00
++        ]);
++
++        $response->assertCreated()
++            ->assertJsonPath('overtime_pay', 300)
++            ->assertJsonPath('rest_day_ot_pay', 608.4)
++            ->assertJsonPath('special_day_ot_pay', 202.8)
++            ->assertJsonPath('holiday_ot_pay', 1248);
++
++        // Monthly-paid: basic pay is the flat semi-monthly salary share (20000 / 2),
++        // regardless of hours worked; only the OT buckets add on top of it.
++        // net = 10000 (basic) + 300 + 608.40 + 202.80 + 1248 = 12359.20
++        $this->assertSame(12359.20, (float) $response->json('net_pay'));
++    }
++
++    public function test_day_type_overtime_buckets_default_to_zero_when_omitted(): void
++    {
++        $this->actingAs(User::where('username', 'admin')->firstOrFail());
++
++        $employeeId = DB::table('employees')->where('employee_no', 'EMP-0001')->value('id');
++
++        $response = $this->postJson('/api/payroll', [
++            'employee_id' => $employeeId,
++            'pay_period_start' => '2026-09-01',
++            'pay_period_end' => '2026-09-15',
++            'regular_hours' => 88,
++            'overtime_hours' => 0,
++            // rest_day_ot_hours / special_day_ot_hours / holiday_ot_hours intentionally omitted
++        ]);
++
++        $response->assertCreated()
++            ->assertJsonPath('rest_day_ot_pay', 0)
++            ->assertJsonPath('special_day_ot_pay', 0)
++            ->assertJsonPath('holiday_ot_pay', 0);
++    }
++}
+diff --git a/apps/web/src/modules/workspaces/PayrollView.vue b/apps/web/src/modules/workspaces/PayrollView.vue
+index 2d07e2f..78bc8cf 100644
+--- a/apps/web/src/modules/workspaces/PayrollView.vue
++++ b/apps/web/src/modules/workspaces/PayrollView.vue
+@@ -22,6 +22,9 @@ const form = ref({
+   pay_period_end: '',
+   regular_hours: 80,
+   overtime_hours: 0,
++  rest_day_ot_hours: 0,
++  special_day_ot_hours: 0,
++  holiday_ot_hours: 0,
+   allowances: 0,
+   bonuses: 0,
+   deductions: 0
+@@ -38,22 +41,31 @@ const submitting = ref(false)
+ const MAX_HOURS_PER_FIELD = 744 // sanity ceiling: 24h x 31 days, the longest realistic pay period
+ const regularHoursError = ref('')
+ const overtimeHoursError = ref('')
++const restDayOtHoursError = ref('')
++const specialDayOtHoursError = ref('')
++const holidayOtHoursError = ref('')
+ 
+-function validateHours() {
+-  regularHoursError.value = ''
+-  overtimeHoursError.value = ''
++const HOUR_FIELDS = [
++  ['regular_hours', regularHoursError],
++  ['overtime_hours', overtimeHoursError],
++  ['rest_day_ot_hours', restDayOtHoursError],
++  ['special_day_ot_hours', specialDayOtHoursError],
++  ['holiday_ot_hours', holidayOtHoursError]
++]
+ 
+-  const regular = form.value.regular_hours
+-  const overtime = form.value.overtime_hours
++function validateHours() {
++  let allValid = true
+ 
+-  if (regular === '' || Number.isNaN(regular) || regular < 0 || regular > MAX_HOURS_PER_FIELD) {
+-    regularHoursError.value = `Enter a value between 0 and ${MAX_HOURS_PER_FIELD}.`
+-  }
+-  if (overtime === '' || Number.isNaN(overtime) || overtime < 0 || overtime > MAX_HOURS_PER_FIELD) {
+-    overtimeHoursError.value = `Enter a value between 0 and ${MAX_HOURS_PER_FIELD}.`
++  for (const [field, errorRef] of HOUR_FIELDS) {
++    errorRef.value = ''
++    const value = form.value[field]
++    if (value === '' || Number.isNaN(value) || value < 0 || value > MAX_HOURS_PER_FIELD) {
++      errorRef.value = `Enter a value between 0 and ${MAX_HOURS_PER_FIELD}.`
++      allValid = false
++    }
+   }
+ 
+-  return !regularHoursError.value && !overtimeHoursError.value
++  return allValid
+ }
+ 
+ async function load() {
+@@ -155,10 +167,40 @@ onMounted(load)
+           min="0"
+           :max="MAX_HOURS_PER_FIELD"
+           step=".25"
+-          label="Overtime hours"
++          label="Ordinary OT hours"
+           :error="overtimeHoursError"
+           @blur="validateHours"
+         />
++        <UiInput
++          v-model.number="form.rest_day_ot_hours"
++          type="number"
++          min="0"
++          :max="MAX_HOURS_PER_FIELD"
++          step=".25"
++          label="Rest-day OT hours"
++          :error="restDayOtHoursError"
++          @blur="validateHours"
++        />
++        <UiInput
++          v-model.number="form.special_day_ot_hours"
++          type="number"
++          min="0"
++          :max="MAX_HOURS_PER_FIELD"
++          step=".25"
++          label="Special-day OT hours"
++          :error="specialDayOtHoursError"
++          @blur="validateHours"
++        />
++        <UiInput
++          v-model.number="form.holiday_ot_hours"
++          type="number"
++          min="0"
++          :max="MAX_HOURS_PER_FIELD"
++          step=".25"
++          label="Holiday OT hours"
++          :error="holidayOtHoursError"
++          @blur="validateHours"
++        />
+       </div>
+       <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
+       <p v-if="message" class="success-message">{{ message }}</p>
