@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditLogger;
+use App\Services\RestockRequestStatusService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class PurchaseOrderController extends Controller
 {
+    public function __construct(private readonly RestockRequestStatusService $restockStatuses) {}
+
     public function index(Request $request)
     {
         $data = $request->validate([
@@ -45,20 +48,16 @@ class PurchaseOrderController extends Controller
                 ->where('status', 'Active')
                 ->orderBy('name')
                 ->get(['id', 'sku', 'name', 'cost_price', 'supplier_id', 'unit']),
-            'approved_restock_requests' => DB::table('restock_requests')
-                ->join('products', 'restock_requests.product_id', '=', 'products.id')
-                ->where('restock_requests.status', 'Approved')
-                ->whereNull('restock_requests.purchase_order_id')
-                ->orderByDesc('restock_requests.id')
-                ->get([
-                    'restock_requests.id',
-                    'restock_requests.ref_number',
-                    'restock_requests.product_id',
-                    'restock_requests.requested_quantity',
-                    'restock_requests.supplier_id',
-                    'products.name as product_name',
-                    'products.sku',
-                ]),
+            'approved_restock_requests' => DB::table('restock_request_items')
+                ->join('restock_requests', 'restock_request_items.restock_request_id', '=', 'restock_requests.id')
+                ->join('products', 'restock_request_items.product_id', '=', 'products.id')
+                ->where('restock_request_items.status', 'Approved')
+                ->whereNotNull('restock_request_items.supplier_id')
+                ->orderByDesc('restock_requests.id')->orderBy('restock_request_items.id')
+                ->get(['restock_requests.id as restock_request_id', 'restock_requests.ref_number', 'restock_request_items.id as restock_request_item_id', 'restock_request_items.product_id', 'restock_request_items.approved_quantity', 'restock_request_items.supplier_id', 'products.name as product_name', 'products.sku'])
+                ->groupBy(fn ($item) => $item->restock_request_id.'-'.$item->supplier_id)
+                ->map(fn ($items) => ['id' => $items->first()->restock_request_id, 'ref_number' => $items->first()->ref_number, 'supplier_id' => $items->first()->supplier_id, 'items' => $items->values()])
+                ->values(),
         ];
     }
 
@@ -130,7 +129,7 @@ class PurchaseOrderController extends Controller
         $data = $this->validated($request);
 
         return DB::transaction(function () use ($data, $request) {
-            [$supplier, $products, $restock] = $this->validateRelationships($data);
+            [$supplier, $products, $restock, $restockItems] = $this->validateRelationships($data);
             $orderId = DB::table('purchase_orders')->insertGetId([
                 'po_number' => $this->purchaseOrderNumber(),
                 'restock_request_id' => $restock?->id,
@@ -146,8 +145,8 @@ class PurchaseOrderController extends Controller
                 'supplier_status' => 'Not Sent',
                 'created_by' => $request->user()->username,
             ]);
-            $this->replaceItems($orderId, $data['items'], $products);
-            $this->linkRestock($restock, $orderId);
+            $this->replaceItems($orderId, $data['items'], $products, $restockItems);
+            $this->linkRestock($restock, $orderId, $restockItems);
             AuditLogger::record($request, 'purchase_order.created', 'purchase_order', $orderId, [
                 'supplier_id' => $supplier->id,
                 'restock_request_id' => $restock?->id,
@@ -179,7 +178,7 @@ class PurchaseOrderController extends Controller
                 'Purchase orders with receiving history cannot be edited.',
             );
 
-            [$supplier, $products, $restock] = $this->validateRelationships(
+            [$supplier, $products, $restock, $restockItems] = $this->validateRelationships(
                 $data,
                 $purchaseOrder,
             );
@@ -194,8 +193,8 @@ class PurchaseOrderController extends Controller
                 'expected_delivery_date' => $data['expected_delivery_date'] ?? null,
                 'notes' => $data['notes'] ?? null,
             ]);
-            $this->replaceItems($purchaseOrder, $data['items'], $products);
-            $this->linkRestock($restock, $purchaseOrder);
+            $this->replaceItems($purchaseOrder, $data['items'], $products, $restockItems);
+            $this->linkRestock($restock, $purchaseOrder, $restockItems);
             AuditLogger::record($request, 'purchase_order.updated', 'purchase_order', $purchaseOrder, [
                 'supplier_id' => $supplier->id,
                 'restock_request_id' => $restock?->id,
@@ -270,9 +269,7 @@ class PurchaseOrderController extends Controller
                 'review_notes' => $data['notes'] ?? null,
             ]);
             if ($order->restock_request_id && ! $approved) {
-                DB::table('restock_requests')
-                    ->where('id', $order->restock_request_id)
-                    ->update(['status' => 'Approved', 'purchase_order_id' => null]);
+                $this->releaseRestockOrder($order);
             }
             AuditLogger::record(
                 $request,
@@ -317,9 +314,7 @@ class PurchaseOrderController extends Controller
                 'status' => 'Ordered',
             ]);
             if ($order->restock_request_id) {
-                DB::table('restock_requests')
-                    ->where('id', $order->restock_request_id)
-                    ->update(['status' => 'Ordered']);
+                $this->setRestockOrderStatus($order, 'Purchase Order Created', 'Ordered');
             }
             AuditLogger::record(
                 $request,
@@ -391,9 +386,7 @@ class PurchaseOrderController extends Controller
                 $update['status'] = 'Cancelled';
                 DB::table('purchase_orders')->where('id', $purchaseOrder)->update($update);
                 if ($order->restock_request_id) {
-                    DB::table('restock_requests')
-                        ->where('id', $order->restock_request_id)
-                        ->update(['status' => 'Approved', 'purchase_order_id' => null]);
+                    $this->releaseRestockOrder($order);
                 }
                 AuditLogger::record(
                     $request,
@@ -458,9 +451,7 @@ class PurchaseOrderController extends Controller
                 'review_notes' => $data['notes'] ?? $order->review_notes,
             ]);
             if ($order->restock_request_id) {
-                DB::table('restock_requests')
-                    ->where('id', $order->restock_request_id)
-                    ->update(['status' => 'Approved', 'purchase_order_id' => null]);
+                $this->releaseRestockOrder($order);
             }
             AuditLogger::record(
                 $request,
@@ -519,42 +510,88 @@ class PurchaseOrderController extends Controller
         }
 
         $restock = null;
+        $restockItems = collect();
         if (! empty($data['restock_request_id'])) {
             $restock = DB::table('restock_requests')
                 ->where('id', $data['restock_request_id'])
                 ->lockForUpdate()
                 ->first();
             abort_unless($restock, 404);
-            $linkedToCurrent = $purchaseOrder !== null
-                && (int) $restock->purchase_order_id === $purchaseOrder;
+            $linkedToCurrent = $purchaseOrder !== null && DB::table('purchase_order_items')
+                ->join(
+                    'restock_request_items',
+                    'purchase_order_items.restock_request_item_id',
+                    '=',
+                    'restock_request_items.id',
+                )
+                ->where('purchase_order_items.purchase_order_id', $purchaseOrder)
+                ->where('restock_request_items.restock_request_id', $restock->id)
+                ->exists();
             abort_unless(
-                $restock->status === 'Approved'
-                    || ($linkedToCurrent && $restock->status === 'Purchase Order Created'),
+                in_array($restock->status, ['Approved', 'Purchase Order Created'], true)
+                    || $linkedToCurrent,
                 409,
                 'Only approved, uncommitted restock requests can be linked.',
             );
-            abort_if(
-                $restock->purchase_order_id !== null && ! $linkedToCurrent,
-                409,
-                'This restock request is already linked to another purchase order.',
-            );
-            abort_if(
-                $restock->supplier_id !== null
-                    && (int) $restock->supplier_id !== (int) $supplier->id,
-                422,
-                'The restock request belongs to a different supplier.',
-            );
+
+            $restockItems = DB::table('restock_request_items')
+                ->where('restock_request_id', $restock->id)
+                ->whereIn('product_id', $productIds)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('product_id');
             abort_unless(
-                $productIds->contains((int) $restock->product_id),
+                $restockItems->count() === $productIds->unique()->count(),
                 422,
-                'The purchase order must include the restock-request product.',
+                'The purchase order must contain only restock-request products.',
             );
+
+            // A line already committed to a different purchase order must never be
+            // orderable again, or the same approved quantity would be bought twice.
+            $claimedElsewhere = DB::table('purchase_order_items')
+                ->whereIn('restock_request_item_id', $restockItems->pluck('id'))
+                ->when(
+                    $purchaseOrder !== null,
+                    fn ($query) => $query->where('purchase_order_id', '!=', $purchaseOrder),
+                )
+                ->pluck('restock_request_item_id')
+                ->all();
+
+            foreach ($data['items'] as $item) {
+                $restockItem = $restockItems[$item['product_id']];
+                abort_if(
+                    in_array($restockItem->id, $claimedElsewhere, true),
+                    409,
+                    "{$restockItem->sku} is already on another purchase order.",
+                );
+                abort_unless(
+                    in_array($restockItem->status, ['Approved', 'Purchase Order Created'], true),
+                    409,
+                    "{$restockItem->sku} is not available for ordering.",
+                );
+                abort_if(
+                    $restockItem->supplier_id === null,
+                    422,
+                    "{$restockItem->sku} needs a supplier assigned first.",
+                );
+                abort_if(
+                    (int) $restockItem->supplier_id !== (int) $supplier->id,
+                    422,
+                    'A purchase order can contain restock lines for only one supplier.',
+                );
+                abort_if(
+                    $restockItem->approved_quantity === null
+                        || $item['quantity'] > $restockItem->approved_quantity,
+                    422,
+                    "{$restockItem->sku} exceeds its approved quantity.",
+                );
+            }
         }
 
-        return [$supplier, $products, $restock];
+        return [$supplier, $products, $restock, $restockItems];
     }
 
-    private function replaceItems(int $purchaseOrder, array $items, Collection $products): void
+    private function replaceItems(int $purchaseOrder, array $items, Collection $products, Collection $restockItems): void
     {
         DB::table('purchase_order_items')
             ->where('purchase_order_id', $purchaseOrder)
@@ -568,19 +605,18 @@ class PurchaseOrderController extends Controller
                 'quantity_ordered' => $item['quantity'],
                 'quantity_received' => 0,
                 'unit_cost' => round((float) $item['unit_cost'], 2),
+                'restock_request_item_id' => $restockItems->get($product->id)?->id,
             ]);
         }
     }
 
-    private function linkRestock(?object $restock, int $purchaseOrder): void
+    private function linkRestock(?object $restock, int $purchaseOrder, Collection $restockItems): void
     {
         if (! $restock) {
             return;
         }
-        DB::table('restock_requests')->where('id', $restock->id)->update([
-            'status' => 'Purchase Order Created',
-            'purchase_order_id' => $purchaseOrder,
-        ]);
+        DB::table('restock_request_items')->whereIn('id', $restockItems->pluck('id'))->update(['status' => 'Purchase Order Created']);
+        $this->restockStatuses->sync($restock->id);
     }
 
     private function releaseRestockIfChanged(object $order, ?int $nextRestockId): void
@@ -589,11 +625,24 @@ class PurchaseOrderController extends Controller
             $order->restock_request_id
             && (int) $order->restock_request_id !== $nextRestockId
         ) {
-            DB::table('restock_requests')
-                ->where('id', $order->restock_request_id)
-                ->where('purchase_order_id', $order->id)
-                ->update(['status' => 'Approved', 'purchase_order_id' => null]);
+            $itemIds = DB::table('purchase_order_items')->where('purchase_order_id', $order->id)->whereNotNull('restock_request_item_id')->pluck('restock_request_item_id');
+            DB::table('restock_request_items')->whereIn('id', $itemIds)->where('status', 'Purchase Order Created')->update(['status' => 'Approved']);
+            $this->restockStatuses->sync($order->restock_request_id);
         }
+    }
+
+    private function releaseRestockOrder(object $order): void
+    {
+        $itemIds = DB::table('purchase_order_items')->where('purchase_order_id', $order->id)->whereNotNull('restock_request_item_id')->pluck('restock_request_item_id');
+        DB::table('restock_request_items')->whereIn('id', $itemIds)->whereIn('status', ['Purchase Order Created', 'Ordered'])->update(['status' => 'Approved']);
+        $this->restockStatuses->sync($order->restock_request_id);
+    }
+
+    private function setRestockOrderStatus(object $order, string $from, string $to): void
+    {
+        $itemIds = DB::table('purchase_order_items')->where('purchase_order_id', $order->id)->whereNotNull('restock_request_item_id')->pluck('restock_request_item_id');
+        DB::table('restock_request_items')->whereIn('id', $itemIds)->where('status', $from)->update(['status' => $to]);
+        $this->restockStatuses->sync($order->restock_request_id);
     }
 
     private function summaryQuery()

@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditLogger;
+use App\Services\RestockRequestStatusService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class StockReceivingController extends Controller
 {
+    public function __construct(private readonly RestockRequestStatusService $restockStatuses) {}
+
     public function store(Request $request, int $purchaseOrder)
     {
         $data = $request->validate([
@@ -179,13 +182,25 @@ class StockReceivingController extends Controller
                 'received_at' => now()->format('Y-m-d H:i:s'),
             ]);
             if ($order->restock_request_id) {
-                DB::table('restock_requests')
-                    ->where('id', $order->restock_request_id)
-                    ->update([
-                        'status' => $newStatus === 'Fully Received'
-                            ? 'Completed'
-                            : 'Partially Received',
-                    ]);
+                $restockItemIds = DB::table('purchase_order_items')
+                    ->where('purchase_order_id', $purchaseOrder)
+                    ->whereNotNull('restock_request_item_id')
+                    ->get(['restock_request_item_id', 'quantity_ordered', 'quantity_received']);
+                foreach ($restockItemIds as $restockItem) {
+                    // Nothing delivered against this line yet: leave it as Ordered
+                    // rather than reporting a receipt that never happened.
+                    if ($restockItem->quantity_received <= 0) {
+                        continue;
+                    }
+                    DB::table('restock_request_items')
+                        ->where('id', $restockItem->restock_request_item_id)
+                        ->update([
+                            'status' => $restockItem->quantity_received >= $restockItem->quantity_ordered
+                                ? 'Fully Received'
+                                : 'Partially Received',
+                        ]);
+                }
+                $this->restockStatuses->sync($order->restock_request_id);
             }
 
             $totalCost = round($totalCost, 2);

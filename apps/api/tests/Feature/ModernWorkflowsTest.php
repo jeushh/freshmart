@@ -212,7 +212,7 @@ class ModernWorkflowsTest extends TestCase
             'entity_id' => (string) $requestId,
         ]);
         $this->assertDatabaseHas('audit_logs', [
-            'action' => 'restock_request.approved',
+            'action' => 'restock_request.reviewed',
             'entity_id' => (string) $requestId,
         ]);
     }

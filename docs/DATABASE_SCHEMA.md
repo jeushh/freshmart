@@ -13,7 +13,7 @@ scripts, and legacy query inventory.
 | Catalog | `suppliers`, `products` |
 | HR and payroll | `attendance_logs`, `hr_requests`, `payroll` |
 | Sales and inventory | `sales_ledger`, `refunds`, `inventory_movements`, `cash_drawers` |
-| Procurement | `restock_requests`, `purchase_orders`, `purchase_order_items`, `stock_receivings`, `stock_receiving_items`, `supplier_invoices`, `supplier_invoice_items`, `accounts_payable` |
+| Procurement | `restock_requests`, `restock_request_items`, `purchase_orders`, `purchase_order_items`, `stock_receivings`, `stock_receiving_items`, `supplier_invoices`, `supplier_invoice_items`, `accounts_payable` |
 | Finance | `finance_requests`, `expenses`, `financial_transactions`, `supplier_payments` |
 | Operations | `audit_logs`, `system_settings` |
 
@@ -21,6 +21,37 @@ Every one of the 23 application tables in the legacy database has a baseline
 migration. The migrations retain the established column names, SQLite storage
 types, defaults, status values, unique keys, indexes, and relationships used by
 the application.
+
+## Multi-item restock requests
+
+A restock request is a requisition header with one line per product, matching the
+existing header/line shape of purchase orders, stock receivings, and supplier
+invoices:
+
+- `restock_request_items` holds one line per requested product. Each line snapshots
+  `current_stock`, `reorder_level`, `max_stock`, and `recommended_quantity` as they
+  stood when the request was raised, so an approver sees the conditions that
+  justified it rather than live figures.
+- A line carries its own `status`, `approved_quantity`, and `review_notes`, so one
+  request may have an approved line and a rejected line. `approved_quantity` is
+  `NULL` on rejected lines and never exceeds `requested_quantity`.
+- `UNIQUE (restock_request_id, product_id)` prevents the same product appearing
+  twice in one request. A partial index equivalent is enforced in application code
+  for the wider rule that a product may sit on at most one active line across all
+  requests.
+- `restock_requests.status` is a rollup derived from its lines by
+  `App\Services\RestockRequestStatusService`, which is the only writer of that
+  column.
+- The legacy single-product columns on `restock_requests` (`product_id`, `sku`,
+  `current_stock`, `reorder_level`, `max_stock`, `recommended_quantity`,
+  `requested_quantity`) are retained and nullable. They are populated only when a
+  request has exactly one line and are `NULL` otherwise, matching the existing
+  convention for `purchase_orders.sku`.
+- `purchase_order_items.restock_request_item_id` is a nullable foreign key linking
+  an ordered line back to the requisition line it fulfils. This is what allows one
+  request to produce several purchase orders when its lines span suppliers; a
+  request's `purchase_order_id` is populated only when a single purchase order
+  covers the whole request.
 
 ## Supplier invoice and accounts payable workflow
 
