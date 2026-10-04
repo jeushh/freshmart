@@ -546,15 +546,26 @@ class PurchaseOrderController extends Controller
                 'The purchase order must contain only restock-request products.',
             );
 
-            // A line already committed to a different purchase order must never be
-            // orderable again, or the same approved quantity would be bought twice.
+            // A line already committed to a different, still-active purchase order must
+            // never be orderable again, or the same approved quantity would be bought
+            // twice. A Cancelled order (rejected on review, cancelled, or rejected by the
+            // supplier) already released its restock items back to 'Approved' via
+            // releaseRestockOrder(), so its leftover purchase_order_items rows must not
+            // count as a claim here.
             $claimedElsewhere = DB::table('purchase_order_items')
-                ->whereIn('restock_request_item_id', $restockItems->pluck('id'))
+                ->join(
+                    'purchase_orders',
+                    'purchase_order_items.purchase_order_id',
+                    '=',
+                    'purchase_orders.id',
+                )
+                ->whereIn('purchase_order_items.restock_request_item_id', $restockItems->pluck('id'))
+                ->where('purchase_orders.status', '!=', 'Cancelled')
                 ->when(
                     $purchaseOrder !== null,
-                    fn ($query) => $query->where('purchase_order_id', '!=', $purchaseOrder),
+                    fn ($query) => $query->where('purchase_order_items.purchase_order_id', '!=', $purchaseOrder),
                 )
-                ->pluck('restock_request_item_id')
+                ->pluck('purchase_order_items.restock_request_item_id')
                 ->all();
 
             foreach ($data['items'] as $item) {

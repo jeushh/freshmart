@@ -18,6 +18,8 @@ const orders = ref([])
 const suppliers = ref([])
 const products = ref([])
 const restockRequests = ref([])
+const restockKey = ref('')
+const linkedRestock = ref(null)
 const selected = ref(null)
 const filters = ref({ approval_status: '', status: '', supplier_status: '', supplier_id: '', search: '' })
 const listError = ref('')
@@ -67,6 +69,30 @@ const formTotal = computed(() => form.value.items.reduce(
   (sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_cost || 0),
   0
 ))
+const restockGroupKey = group => `${group.id}-${group.supplier_id}`
+const linkedRestockKey = id => `linked-${id}`
+const supplierName = id => suppliers.value.find(item => item.id === Number(id))?.name || `Supplier #${id}`
+const restockOptions = computed(() => {
+  const options = restockRequests.value.map(group => {
+    const count = (group.items || []).length
+    return {
+      key: restockGroupKey(group),
+      label: `${group.ref_number} — ${supplierName(group.supplier_id)} (${count} ${count === 1 ? 'item' : 'items'})`
+    }
+  })
+  if (linkedRestock.value) {
+    options.unshift({
+      key: linkedRestockKey(linkedRestock.value.id),
+      label: `${linkedRestock.value.ref} — linked to this order`
+    })
+  }
+  return options
+})
+const restockHint = computed(() => {
+  const key = String(restockKey.value || '')
+  if (!key || key.startsWith('linked-')) return ''
+  return 'Loads only this supplier’s approved items. Quantities cannot exceed the approved amount.'
+})
 const canCancelSelected = computed(() => {
   if (!selected.value || selected.value.receivings.length) return false
   const state = selected.value.order.approval_status
@@ -103,7 +129,7 @@ async function load(refreshSelected = false) {
     orders.value = data.orders.data
     suppliers.value = data.suppliers
     products.value = data.products
-    restockRequests.value = data.approved_restock_requests
+    restockRequests.value = Object.values(data.approved_restock_requests || {})
     if (refreshSelected && selected.value) await open(selected.value.order.id)
   } catch (requestError) {
     listError.value = requestError.message
@@ -126,15 +152,32 @@ function removeLine(index) {
 }
 
 function useRestock() {
-  const restock = restockRequests.value.find(item => item.id === Number(form.value.restock_request_id))
-  if (!restock) return
-  form.value.supplier_id = restock.supplier_id || ''
-  const product = products.value.find(item => item.id === restock.product_id)
-  form.value.items = [{
-    product_id: restock.product_id,
-    quantity: restock.requested_quantity,
-    unit_cost: Number(product?.cost_price || 0)
-  }]
+  const key = String(restockKey.value || '')
+  if (key.startsWith('linked-')) {
+    form.value.restock_request_id = linkedRestock.value?.id ?? null
+    return
+  }
+  const group = restockRequests.value.find(item => restockGroupKey(item) === key)
+  if (!group) {
+    form.value.restock_request_id = null
+    return
+  }
+  form.value.restock_request_id = group.id
+  form.value.supplier_id = group.supplier_id || ''
+  form.value.items = (group.items || []).map(item => {
+    const product = products.value.find(candidate => candidate.id === Number(item.product_id))
+    return {
+      product_id: item.product_id,
+      quantity: item.approved_quantity ?? 1,
+      unit_cost: Number(product?.cost_price || 0)
+    }
+  })
+}
+
+function resetForm() {
+  form.value = blankForm()
+  restockKey.value = ''
+  linkedRestock.value = null
 }
 
 async function save() {
@@ -152,7 +195,7 @@ async function save() {
       : await api.post('/purchase-orders', payload)
     selected.value = data
     message.value = form.value.id ? 'Purchase order updated.' : 'Purchase order created.'
-    form.value = blankForm()
+    resetForm()
     await load()
   } catch (requestError) {
     formError.value = requestError.message
@@ -189,6 +232,11 @@ function editSelected() {
       unit_cost: Number(item.unit_cost)
     }))
   }
+  const linkedId = detail.order.restock_request_id
+  linkedRestock.value = linkedId
+    ? { id: linkedId, ref: detail.order.restock_ref_number || `Request #${linkedId}` }
+    : null
+  restockKey.value = linkedId ? linkedRestockKey(linkedId) : ''
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -310,11 +358,9 @@ onMounted(load)
           <option value="">Select supplier</option>
           <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option>
         </UiSelect>
-        <UiSelect v-model="form.restock_request_id" label="Approved restock request" @change="useRestock">
-          <option :value="null">None</option>
-          <option v-for="restock in restockRequests" :key="restock.id" :value="restock.id">
-            {{ restock.ref_number }} — {{ restock.product_name }}
-          </option>
+        <UiSelect v-model="restockKey" label="Approved restock request" :hint="restockHint" @change="useRestock">
+          <option value="">None</option>
+          <option v-for="option in restockOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
         </UiSelect>
         <UiInput v-model="form.expected_delivery_date" type="date" label="Expected delivery" />
         <label class="ui-field po-form__span">
@@ -352,7 +398,7 @@ onMounted(load)
         <UiButton type="submit" :loading="creating" loading-label="Saving">
           {{ form.id ? 'Update draft' : 'Create draft' }}
         </UiButton>
-        <UiButton v-if="form.id" type="button" variant="secondary" @click="form = blankForm()">Cancel edit</UiButton>
+        <UiButton v-if="form.id" type="button" variant="secondary" @click="resetForm">Cancel edit</UiButton>
       </div>
     </form>
   </UiSectionCard>
