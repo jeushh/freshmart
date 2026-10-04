@@ -6,7 +6,7 @@ multi-writer SQLite storage is not supported.
 
 ## Prepare
 
-Install PHP 8.2+ with PDO SQLite, Composer 2, Node.js 22, and npm. Configure a
+Install PHP 8.4+ with PDO SQLite, Composer 2, Node.js 22, and npm. Configure a
 dedicated operating-system user. The web server should expose only
 `apps/api/public`; it must not expose `.env`, `storage`, the database, backup
 manifests, source files, or the preserved legacy database.

@@ -578,6 +578,7 @@ class ReportService
             ->whereIn('order_id', $orderIds)
             ->sum('refund_amount'), 2);
         $transactions = (int) $row->transaction_count;
+        $taxRefunded = $this->refundedTax($base);
 
         return [
             'gross_sales' => (float) $row->gross_sales,
@@ -587,12 +588,54 @@ class ReportService
             'average_transaction' => $transactions > 0
                 ? round((float) $row->gross_sales / $transactions, 2)
                 : 0,
+            // Tax on gross sales (unchanged contract). Refunded and net tax are
+            // reported separately so net VAT can be reconciled with net sales.
             'tax_total' => (float) $row->tax_total,
+            'tax_refunded' => $taxRefunded,
+            'tax_net' => round((float) $row->tax_total - $taxRefunded, 2),
             'discount_total' => (float) $row->discount_total,
             'tax_unknown_records' => (int) $row->tax_unknown_records,
             'discount_unknown_records' => (int) $row->discount_unknown_records,
             'quantity_sold' => (int) $row->quantity_sold,
         ];
+    }
+
+    /**
+     * Tax portion of refunds for the sale lines in the filtered sales query.
+     *
+     * Refunds store no tax column, so the refunded tax is derived from each
+     * sale line's own stored snapshot: refund_amount x tax_amount / total_price,
+     * per (order, SKU). The current tax setting is never used. Lines whose tax
+     * snapshot is unknown (legacy rows with NULL tax_amount) contribute nothing.
+     */
+    private function refundedTax(Builder $base): float
+    {
+        $lines = (clone $base)
+            ->select('sales.order_id', 'sales.item_sku')
+            ->selectRaw(
+                'SUM(sales.tax_amount) as tax_amount, '
+                .'SUM(sales.total_price) as total_price, '
+                .'SUM(CASE WHEN sales.tax_amount IS NULL THEN 1 ELSE 0 END) as unknown_tax',
+            )
+            ->groupBy('sales.order_id', 'sales.item_sku');
+        $refundTotals = DB::table('refunds')
+            ->select('order_id', 'item_sku')
+            ->selectRaw('SUM(refund_amount) as refund_amount')
+            ->groupBy('order_id', 'item_sku');
+
+        $value = DB::query()
+            ->fromSub($lines, 'lines')
+            ->joinSub($refundTotals, 'refund_totals', fn ($join) => $join
+                ->on('refund_totals.order_id', '=', 'lines.order_id')
+                ->on('refund_totals.item_sku', '=', 'lines.item_sku'))
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN lines.unknown_tax = 0 AND lines.total_price > 0 '
+                .'THEN refund_totals.refund_amount * lines.tax_amount / lines.total_price '
+                .'ELSE 0 END), 0) as refunded_tax',
+            )
+            ->value('refunded_tax');
+
+        return round((float) $value, 2);
     }
 
     private function inventorySummary(array $filters): array

@@ -25,7 +25,11 @@ at 100.
 
 - Sales filters cashier, payment method, finalized/refunded state, product,
   and category. It reports gross and net sales, refunds, transaction count,
-  average transaction, stored tax, discounts, and units.
+  average transaction, stored tax, discounts, and units. `tax_total` is the tax
+  on gross sales. `tax_refunded` is the tax share of refunds, derived from each
+  sale line's stored tax snapshot (refund amount x line tax / line total, per
+  order and SKU; lines with an unknown tax snapshot are not estimated), and
+  `tax_net` is `tax_total` minus `tax_refunded`.
 - Inventory reports current quantities, reorder/max states, cost and retail
   valuation, plus date-ranged movement count, stock-in, stock-out, and latest
   movement. Movement-type, category, supplier, and stock-state filters apply.

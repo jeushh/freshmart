@@ -1,6 +1,6 @@
 # Local development
 
-1. Install PHP 8.2+, Composer, Node.js 22+, and npm.
+1. Install PHP 8.4+, Composer, Node.js 22+, and npm.
 2. Run `bash scripts/setup-local.sh --seed` on macOS/Linux or
    `scripts\setup-windows.bat --seed` on Windows.
 3. Start both local servers with the matching start script.

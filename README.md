@@ -19,7 +19,7 @@ migrations, seeders, and tests do not write to it.
 
 ## Local requirements
 
-- PHP 8.2+
+- PHP 8.4+ (the locked Symfony 8.1 packages require PHP 8.4.1 or newer)
 - Composer
 - Node.js 22+
 - npm
