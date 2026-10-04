@@ -317,7 +317,6 @@ onMounted(() => load())
           <th>SKU</th>
           <th>Product</th>
           <th>Movement</th>
-          <th>Quantity</th>
           <th>Previous</th>
           <th>New stock</th>
           <th>Performed by</th>
@@ -329,7 +328,6 @@ onMounted(() => load())
           <td>{{ movement.sku }}</td>
           <td>{{ movement.product_name }}</td>
           <td>{{ movement.movement_type }}</td>
-          <td>{{ movement.quantity }}</td>
           <td>{{ movement.previous_stock }}</td>
           <td>{{ movement.new_stock }}</td>
           <td>{{ movement.performed_by }}</td>
