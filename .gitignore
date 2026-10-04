@@ -18,3 +18,5 @@ database/*.sqlite-wal
 dev.sh
 dev.sh
 apps/web/test-results/
+*.bak
+*.textClipping

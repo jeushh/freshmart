@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '../../api/http.js'
 import UiPageHeader from '../../components/ui/UiPageHeader.vue'
 import { UiButton, UiEmptyState, UiSearchInput, UiStatusBadge } from '../../components/ui/index.js'
@@ -7,11 +7,18 @@ import { sessionStore } from '../../stores/session.js'
 import { formatMoney } from '../../utils/formatters.js'
 
 const LOW_STOCK_THRESHOLD = 5
-const PAYMENT_METHODS = ['Cash', 'Card', 'QR']
+const PAYMENT_METHODS = ['Cash', 'QR']
+const QUICK_CASH_AMOUNTS = [100, 200, 500, 1000]
+const QR_POLL_INTERVAL_MS = 3000
 
 const products = ref([])
 const cart = ref([])
 const payment = ref('Cash')
+const cashTendered = ref('')
+const qrSession = ref(null) // { payment_id, qr_image, expires_at, amount }
+const qrStatus = ref('') // '', 'creating', 'waiting', 'expired', 'failed'
+const qrError = ref('')
+let qrTimer = null
 const searchQuery = ref('')
 const activeCategory = ref('All')
 const message = ref('')
@@ -48,6 +55,16 @@ const total = computed(() => sessionStore.state.settings.tax_inclusive
   : baseTotal.value + tax.value)
 const subtotal = computed(() => total.value - tax.value)
 
+const tenderedAmount = computed(() => {
+  const value = Number(cashTendered.value)
+  return Number.isFinite(value) ? value : 0
+})
+const roundedTotal = computed(() => Math.round(total.value * 100) / 100)
+const changeDue = computed(() => Math.max(0, Math.round((tenderedAmount.value - roundedTotal.value) * 100) / 100))
+const cashShort = computed(() => Math.max(0, Math.round((roundedTotal.value - tenderedAmount.value) * 100) / 100))
+const cashReady = computed(() => payment.value !== 'Cash' || (cashTendered.value !== '' && tenderedAmount.value >= roundedTotal.value))
+const canReview = computed(() => cart.value.length > 0 && productsReady.value && cashReady.value)
+
 const categories = computed(() => {
   const found = new Set(products.value.map(product => product.category).filter(Boolean))
   return ['All', ...[...found].sort()]
@@ -77,6 +94,62 @@ function stockLabel(product) {
 
 function cartQuantityFor(productId) {
   return cart.value.find(item => item.id === productId)?.quantity || 0
+}
+
+function setCashExact() {
+  cashTendered.value = roundedTotal.value.toFixed(2)
+}
+
+function setCashQuick(amount) {
+  cashTendered.value = String(amount)
+}
+
+function stopQrPolling() {
+  if (qrTimer) clearInterval(qrTimer)
+  qrTimer = null
+}
+
+function resetQr() {
+  stopQrPolling()
+  qrSession.value = null
+  qrStatus.value = ''
+  qrError.value = ''
+}
+
+async function startQrPayment() {
+  if (submitting.value || qrStatus.value === 'creating') return
+  resetQr()
+  qrStatus.value = 'creating'
+  try {
+    // The server recomputes the total from the cart items; the client amount is never trusted.
+    const result = await api.post('/workspace/pos/qr-payments', {
+      items: cart.value.map(item => ({ product_id: item.id, quantity: item.quantity }))
+    })
+    qrSession.value = result
+    qrStatus.value = 'waiting'
+    qrTimer = setInterval(pollQrPayment, QR_POLL_INTERVAL_MS)
+  } catch (requestError) {
+    qrStatus.value = 'failed'
+    qrError.value = requestError.message
+  }
+}
+
+async function pollQrPayment() {
+  if (!qrSession.value || submitting.value) return
+  try {
+    const result = await api.get(`/workspace/pos/qr-payments/${qrSession.value.payment_id}`)
+    if (result.status === 'paid') {
+      stopQrPolling()
+      await checkout()
+    } else if (result.status === 'expired' || result.status === 'failed') {
+      stopQrPolling()
+      qrStatus.value = 'expired'
+      qrError.value = 'QR code expired or payment failed. Generate a new one.'
+    }
+  } catch (requestError) {
+    // Transient network errors: keep polling.
+    qrError.value = requestError.message
+  }
 }
 
 async function load() {
@@ -113,7 +186,7 @@ function decrement(item) {
 }
 
 async function openConfirmation() {
-  if (!cart.value.length || !productsReady.value || submitting.value) return
+  if (!canReview.value || submitting.value) return
   confirming.value = true
   await nextTick()
   cancelButton.value?.focus()
@@ -121,6 +194,7 @@ async function openConfirmation() {
 
 async function cancelConfirmation() {
   if (submitting.value) return
+  resetQr()
   confirming.value = false
   await nextTick()
   checkoutButton.value?.focus()
@@ -185,6 +259,9 @@ function completedSaleSnapshot(result) {
     completed_at: result.completed_at,
     cashier_username: result.cashier_username,
     payment_method: result.payment_method,
+    payment_reference: result.payment_reference ?? null,
+    cash_tendered: result.cash_tendered ?? null,
+    change_due: result.change_due ?? null,
     subtotal: result.subtotal,
     items,
     business_name: settings.business_name,
@@ -315,6 +392,8 @@ async function newSale() {
   completedSale.value = null
   cart.value = []
   payment.value = 'Cash'
+  cashTendered.value = ''
+  resetQr()
   message.value = ''
   if (refreshRequired) await load()
   else error.value = ''
@@ -328,13 +407,17 @@ async function checkout() {
     message.value = ''
     const result = await api.post('/workspace/pos/checkout', {
       items: cart.value.map(item => ({ product_id: item.id, quantity: item.quantity })),
-      payment_method: payment.value
+      payment_method: payment.value,
+      ...(payment.value === 'Cash' ? { cash_tendered: tenderedAmount.value } : {}),
+      ...(payment.value === 'QR' ? { payment_reference: qrSession.value?.payment_id } : {})
     })
     resetRefundSession()
     completedSale.value = completedSaleSnapshot(result)
     message.value = `Order ${result.order_id} completed — ${formatMoney(result.total)}`
     confirming.value = false
     cart.value = []
+    cashTendered.value = ''
+    resetQr()
     await load()
   } catch (requestError) {
     error.value = requestError.message
@@ -343,7 +426,13 @@ async function checkout() {
   }
 }
 
+watch(payment, () => {
+  cashTendered.value = ''
+  resetQr()
+})
+
 onMounted(load)
+onBeforeUnmount(stopQrPolling)
 </script>
 
 <template>
@@ -408,6 +497,13 @@ onMounted(load)
           <dd>{{ formatReceiptMoney(completedSale.tax_total) }}</dd>
         </div>
         <div class="receipt__grand-total"><dt>Total</dt><dd>{{ formatReceiptMoney(completedSale.total) }}</dd></div>
+        <template v-if="completedSale.payment_method === 'Cash' && completedSale.cash_tendered != null">
+          <div><dt>Cash received</dt><dd>{{ formatReceiptMoney(completedSale.cash_tendered) }}</dd></div>
+          <div class="receipt__change"><dt>Change</dt><dd>{{ formatReceiptMoney(completedSale.change_due) }}</dd></div>
+        </template>
+        <div v-if="completedSale.payment_method === 'QR' && completedSale.payment_reference">
+          <dt>Payment ref</dt><dd>{{ completedSale.payment_reference }}</dd>
+        </div>
       </dl>
 
       <footer class="receipt__footer">
@@ -542,13 +638,42 @@ onMounted(load)
               {{ method }}
             </button>
           </div>
+          <div v-if="payment === 'Cash'" class="pos-cash">
+            <label class="pos-cash__label" for="cash-tendered">Cash received</label>
+            <input
+              id="cash-tendered"
+              v-model="cashTendered"
+              class="pos-cash__input"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+            >
+            <div class="pos-cash__quick">
+              <button type="button" class="pos-cash__chip" :disabled="!cart.length" @click="setCashExact">Exact</button>
+              <button
+                v-for="amount in QUICK_CASH_AMOUNTS"
+                :key="amount"
+                type="button"
+                class="pos-cash__chip"
+                @click="setCashQuick(amount)"
+              >{{ formatMoney(amount) }}</button>
+            </div>
+            <div class="pos-cart__summary-row pos-cash__change" :class="{ 'pos-cash__change--short': cashTendered !== '' && cashShort > 0 }">
+              <span v-if="cashTendered !== '' && cashShort > 0">Short by</span>
+              <span v-else>Change</span>
+              <strong>{{ formatMoney(cashTendered !== '' && cashShort > 0 ? cashShort : changeDue) }}</strong>
+            </div>
+          </div>
+          <p v-else class="field-help">A QR code will be generated on the next step. The customer scans it with any bank or e-wallet app.</p>
         </fieldset>
 
         <UiButton
           ref="checkoutButton"
           class="pos-checkout-button"
           size="lg"
-          :disabled="!cart.length || !productsReady"
+          :disabled="!canReview"
           @click="openConfirmation"
         >
           Review sale · {{ formatMoney(total) }}
@@ -597,7 +722,21 @@ onMounted(load)
             </div>
             <div class="checkout-dialog__total"><dt>Total</dt><dd>{{ formatMoney(total) }}</dd></div>
             <div><dt>Payment method</dt><dd>{{ payment }}</dd></div>
+            <template v-if="payment === 'Cash'">
+              <div><dt>Cash received</dt><dd>{{ formatMoney(tenderedAmount) }}</dd></div>
+              <div class="checkout-dialog__total"><dt>Change</dt><dd>{{ formatMoney(changeDue) }}</dd></div>
+            </template>
           </dl>
+
+          <div v-if="payment === 'QR' && qrSession" class="qr-panel">
+            <img :src="qrSession.qr_image" alt="QR Ph code for this sale" class="qr-panel__image">
+            <p class="qr-panel__status" role="status">
+              <template v-if="submitting">Payment received — completing sale…</template>
+              <template v-else>Waiting for payment of {{ formatMoney(total) }}…</template>
+            </p>
+          </div>
+          <p v-if="qrStatus === 'creating'" role="status">Generating QR code…</p>
+          <p v-if="qrError && payment === 'QR'" class="form-error" role="alert">{{ qrError }}</p>
           <p v-if="error" class="form-error" role="alert">{{ error }}</p>
         </div>
 
@@ -605,8 +744,21 @@ onMounted(load)
           <UiButton ref="cancelButton" variant="secondary" :disabled="submitting" @click="cancelConfirmation">
             Cancel
           </UiButton>
-          <UiButton :loading="submitting" loading-label="Completing sale" @click="checkout">
+          <UiButton
+            v-if="payment === 'Cash'"
+            :loading="submitting"
+            loading-label="Completing sale"
+            @click="checkout"
+          >
             Complete sale
+          </UiButton>
+          <UiButton
+            v-else-if="qrStatus !== 'waiting'"
+            :loading="qrStatus === 'creating'"
+            loading-label="Generating QR"
+            @click="startQrPayment"
+          >
+            {{ qrStatus === 'expired' || qrStatus === 'failed' ? 'Generate new QR' : 'Generate QR' }}
           </UiButton>
         </footer>
       </section>
@@ -1114,7 +1266,7 @@ onMounted(load)
 
 .pos-payment__options {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--fm-space-2);
 }
 
@@ -1147,6 +1299,89 @@ onMounted(load)
   width: 100%;
 }
 
+.pos-cash {
+  display: grid;
+  gap: var(--fm-space-2);
+  margin-top: var(--fm-space-3);
+}
+
+.pos-cash__label {
+  color: var(--fm-color-text);
+  font-size: var(--fm-font-size-sm);
+  font-weight: var(--fm-font-weight-semibold);
+}
+
+.pos-cash__input {
+  width: 100%;
+  padding: var(--fm-space-3);
+  border: var(--fm-border-width) solid var(--fm-color-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-color-surface);
+  font: inherit;
+  font-size: var(--fm-font-size-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-cash__input:focus-visible {
+  outline: none;
+  box-shadow: var(--fm-focus-ring);
+}
+
+.pos-cash__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fm-space-2);
+}
+
+.pos-cash__chip {
+  min-height: var(--fm-control-height-sm);
+  padding: 0 var(--fm-space-3);
+  border: var(--fm-border-width) solid var(--fm-color-border);
+  border-radius: var(--fm-radius-pill);
+  background: var(--fm-color-surface);
+  color: var(--fm-color-text-secondary);
+  font-size: var(--fm-font-size-sm);
+  font-weight: var(--fm-font-weight-semibold);
+  cursor: pointer;
+}
+
+.pos-cash__chip:hover:not(:disabled) {
+  background: var(--fm-color-slate-100);
+}
+
+.pos-cash__change {
+  color: var(--fm-color-success-700);
+  font-weight: var(--fm-font-weight-bold);
+}
+
+.pos-cash__change--short {
+  color: var(--fm-color-danger-700, #b42318);
+}
+
+.qr-panel {
+  display: grid;
+  justify-items: center;
+  gap: var(--fm-space-3);
+  padding: var(--fm-space-4);
+  border: var(--fm-border-width) dashed var(--fm-color-slate-300);
+  border-radius: var(--fm-radius-card);
+}
+
+.qr-panel__image {
+  width: min(15rem, 100%);
+  height: auto;
+  background: #fff;
+}
+
+.qr-panel__status {
+  margin: 0;
+  color: var(--fm-color-text-secondary);
+}
+
+.receipt__change {
+  font-weight: var(--fm-font-weight-bold);
+}
+
 @media (max-width: 64rem) {
   .pos-workspace {
     grid-template-columns: 1fr;
@@ -1154,12 +1389,6 @@ onMounted(load)
 
   .pos-cart {
     position: static;
-  }
-}
-
-@media (max-width: 30rem) {
-  .pos-payment__options {
-    grid-template-columns: 1fr 1fr;
   }
 }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditLogger;
+use App\Services\PayMongoService;
 use App\Services\SystemSettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -254,7 +255,9 @@ class BusinessController extends Controller
             'items' => 'required|array|min:1|max:100',
             'items.*.product_id' => 'required|integer|distinct|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
-            'payment_method' => 'required|in:Cash,Card,QR',
+            'payment_method' => 'required|in:Cash,QR',
+            'cash_tendered' => 'required_if:payment_method,Cash|nullable|numeric|min:0|max:10000000',
+            'payment_reference' => ['required_if:payment_method,QR', 'nullable', 'string', 'max:100', 'regex:/^pi_[A-Za-z0-9]+$/'],
         ]);
 
         return DB::transaction(function () use ($data, $request, $settings) {
@@ -323,6 +326,33 @@ class BusinessController extends Controller
             $subtotal = $subtotalCents / 100;
             $total = $totalCents / 100;
             $taxTotal = $taxCents / 100;
+
+            // Payment verification: always computed/verified on the server.
+            $cashTendered = null;
+            $changeDue = null;
+            $paymentReference = null;
+            if ($paymentMethod === 'Cash') {
+                $tenderedCents = (int) round(((float) $data['cash_tendered']) * 100);
+                abort_if($tenderedCents < $totalCents, 422, 'Cash received is less than the sale total.');
+                $cashTendered = $tenderedCents / 100;
+                $changeDue = ($tenderedCents - $totalCents) / 100;
+            } else {
+                $paymentReference = $data['payment_reference'];
+                abort_if(
+                    DB::table('pos_payments')->where('payment_reference', $paymentReference)->exists(),
+                    422,
+                    'This QR payment was already used for another sale.',
+                );
+                PosQrPaymentController::assertQrPaid(app(PayMongoService::class), $paymentReference, $total);
+            }
+            DB::table('pos_payments')->insert([
+                'order_id' => $orderId,
+                'payment_method' => $paymentMethod,
+                'cash_tendered' => $cashTendered,
+                'change_due' => $changeDue,
+                'payment_reference' => $paymentReference,
+                'created_at' => now()->format('Y-m-d H:i:s'),
+            ]);
             DB::table('financial_transactions')->insert([
                 'transaction_type' => 'Sale',
                 'amount' => $total,
@@ -349,6 +379,9 @@ class BusinessController extends Controller
                 'completed_at' => $completedAt->toIso8601String(),
                 'cashier_username' => $cashierUsername,
                 'payment_method' => $paymentMethod,
+                'cash_tendered' => $cashTendered,
+                'change_due' => $changeDue,
+                'payment_reference' => $paymentReference,
                 'subtotal' => $subtotal,
                 'items' => $receiptItems,
             ];

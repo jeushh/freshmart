@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\FinancePurchaseOrderLookupController;
 use App\Http\Controllers\Api\HrRequestController;
 use App\Http\Controllers\Api\PayrollController;
+use App\Http\Controllers\Api\PosQrPaymentController;
 use App\Http\Controllers\Api\PurchaseOrderController;
 use App\Http\Controllers\Api\RefundController;
 use App\Http\Controllers\Api\ReportController;
@@ -76,6 +77,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/workspace/pos', [BusinessController::class, 'pos'])->middleware('permission:pos.access');
     Route::post('/workspace/pos/checkout', [BusinessController::class, 'checkout'])->middleware('permission:pos.access');
+    Route::post('/workspace/pos/qr-payments', [PosQrPaymentController::class, 'store'])->middleware('permission:pos.access');
+    Route::get('/workspace/pos/qr-payments/{id}', [PosQrPaymentController::class, 'show'])
+        ->where('id', 'pi_[A-Za-z0-9]+')
+        ->middleware('permission:pos.access');
     Route::post('/workspace/pos/refunds', [RefundController::class, 'store'])
         ->middleware('permission:pos.refund');
 

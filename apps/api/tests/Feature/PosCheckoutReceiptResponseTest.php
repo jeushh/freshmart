@@ -48,7 +48,8 @@ class PosCheckoutReceiptResponseTest extends TestCase
                         'price' => 9999,
                     ],
                 ],
-                'payment_method' => 'Card',
+                'payment_method' => 'Cash',
+                'cash_tendered' => 400,
                 'completed_at' => '1999-01-01T00:00:00Z',
             ])->assertOk()
                 ->assertJsonStructure([
@@ -78,7 +79,7 @@ class PosCheckoutReceiptResponseTest extends TestCase
                 ->assertJsonPath('tax_inclusive', false)
                 ->assertJsonPath('subtotal', 276.5)
                 ->assertJsonPath('cashier_username', 'cashier')
-                ->assertJsonPath('payment_method', 'Card')
+                ->assertJsonPath('payment_method', 'Cash')
                 ->assertJsonPath('completed_at', '2026-08-09T02:11:12+00:00')
                 ->assertJsonCount(2, 'items');
         } finally {
@@ -111,7 +112,7 @@ class PosCheckoutReceiptResponseTest extends TestCase
             $this->assertSame($subtotal, (float) $ledger->subtotal_amount);
             $this->assertSame($taxAmount, (float) $ledger->tax_amount);
             $this->assertSame($total, (float) $ledger->total_price);
-            $this->assertSame('Card', $ledger->payment_method);
+            $this->assertSame('Cash', $ledger->payment_method);
             $this->assertSame('cashier', $ledger->cashier_username);
             $this->assertGreaterThanOrEqual($databaseTimestampBefore, $ledger->timestamp);
             $this->assertLessThanOrEqual($databaseTimestampAfter, $ledger->timestamp);
@@ -131,7 +132,7 @@ class PosCheckoutReceiptResponseTest extends TestCase
             'direction' => 'In',
             'reference_type' => 'sale',
             'reference_id' => $orderId,
-            'payment_method' => 'Card',
+            'payment_method' => 'Cash',
             'created_by' => 'cashier',
         ]);
         $this->assertDatabaseHas('audit_logs', [
@@ -158,6 +159,7 @@ class PosCheckoutReceiptResponseTest extends TestCase
             'movements' => DB::table('inventory_movements')->count(),
             'transactions' => DB::table('financial_transactions')->count(),
             'audits' => DB::table('audit_logs')->count(),
+            'payments' => DB::table('pos_payments')->count(),
         ];
 
         $this->actingAs(User::where('username', 'cashier')->firstOrFail());
@@ -167,6 +169,7 @@ class PosCheckoutReceiptResponseTest extends TestCase
                 ['product_id' => $products[1]->id, 'quantity' => 2],
             ],
             'payment_method' => 'Cash',
+            'cash_tendered' => 10000,
         ])->assertUnprocessable();
 
         foreach ([
@@ -189,6 +192,7 @@ class PosCheckoutReceiptResponseTest extends TestCase
         $this->assertSame($before['movements'], DB::table('inventory_movements')->count());
         $this->assertSame($before['transactions'], DB::table('financial_transactions')->count());
         $this->assertSame($before['audits'], DB::table('audit_logs')->count());
+        $this->assertSame($before['payments'], DB::table('pos_payments')->count());
     }
 
     private function setSetting(string $key, string $value): void

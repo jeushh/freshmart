@@ -79,6 +79,10 @@ function params() {
   )
 }
 
+function printReport() {
+  window.print()
+}
+
 function selectReport(type) {
   active.value = type
   report.value = null
@@ -159,7 +163,7 @@ onMounted(() => {
           class="print-hidden"
           variant="secondary"
           :disabled="!report"
-          @click="window.print()"
+          @click="printReport"
         >Print report</UiButton>
         <UiButton
           v-if="sessionStore.can('reports.export')"

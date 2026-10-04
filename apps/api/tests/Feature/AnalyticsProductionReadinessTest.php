@@ -110,6 +110,7 @@ class AnalyticsProductionReadinessTest extends TestCase
         $response = $this->postJson('/api/workspace/pos/checkout', [
             'items' => [['product_id' => $product->id, 'quantity' => 2]],
             'payment_method' => 'Cash',
+            'cash_tendered' => 10000,
         ])->assertOk()
             ->assertJsonPath('total', 145.6)
             ->assertJsonPath('tax_total', 15.6)

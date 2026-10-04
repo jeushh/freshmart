@@ -196,6 +196,7 @@ class RefundAuthorizationTest extends TestCase
                 'quantity' => $quantity,
             ]],
             'payment_method' => 'Cash',
+            'cash_tendered' => 10000,
         ])->assertOk()->json('order_id');
     }
 
