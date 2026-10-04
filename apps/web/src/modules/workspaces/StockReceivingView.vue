@@ -26,6 +26,11 @@ const confirmOpen = ref(false)
 const submitting = ref(false)
 
 const eligibleOrders = computed(() => orders.value.filter(isEligibleForReceiving))
+const fullyReceived = computed(() => {
+  if (!selected.value) return false
+  return selected.value.order.status === 'Fully Received'
+    || (selected.value.items.length > 0 && selected.value.items.every(item => Number(item.outstanding_quantity) === 0))
+})
 const receivingValid = computed(() => {
   if (!selected.value) return false
   const entries = Object.values(receiving.value)
@@ -109,6 +114,14 @@ async function open(id) {
   } finally {
     detailLoading.value = false
   }
+}
+
+function closeDetail() {
+  selected.value = null
+  receiving.value = {}
+  receivingNotes.value = ''
+  message.value = ''
+  error.value = ''
 }
 
 function startReceive() {
@@ -234,53 +247,63 @@ onMounted(load)
         </table>
       </div>
 
-      <h3 class="receiving-detail__subtitle">Receive stock</h3>
-      <form class="receiving-form" @submit.prevent="startReceive">
-        <div v-for="item in selected.items" :key="item.id" class="receiving-line">
-          <strong class="receiving-line__name">{{ item.sku }} — {{ item.product_name }}</strong>
-          <UiInput label="Outstanding" :model-value="item.outstanding_quantity" size="sm" disabled />
-          <UiInput
-            v-model.number="receiving[item.id].delivered_quantity"
-            type="number"
-            min="0"
-            label="Delivered"
-            size="sm"
-          />
-          <UiInput label="Accepted" :model-value="acceptedFor(receiving[item.id])" size="sm" disabled />
-          <UiInput
-            v-model.number="receiving[item.id].damaged_quantity"
-            type="number"
-            min="0"
-            :max="receiving[item.id].delivered_quantity"
-            label="Damaged"
-            size="sm"
-          />
-          <UiInput
-            v-model.number="receiving[item.id].rejected_quantity"
-            type="number"
-            min="0"
-            :max="receiving[item.id].delivered_quantity"
-            label="Rejected"
-            size="sm"
-          />
-        </div>
-        <label class="ui-field">
-          <span class="ui-field__label">Receiving notes</span>
-          <textarea
-            v-model.trim="receivingNotes"
-            class="ui-field-control"
-            rows="2"
-            maxlength="500"
-            placeholder="Optional receiving notes"
-          ></textarea>
-        </label>
-        <p v-if="!receivingValid" class="field-help">
-          Enter at least one valid delivery. Accepted units cannot exceed the outstanding quantity, and damaged plus rejected units cannot exceed delivered units.
-        </p>
-        <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+      <div v-if="fullyReceived" class="receiving-complete" role="status">
         <p v-if="message" class="success-message">{{ message }}</p>
-        <UiButton type="submit" :disabled="!receivingValid">Record receiving</UiButton>
-      </form>
+        <p class="success-message">
+          <strong>Fully received.</strong> All ordered units are accounted for, so nothing more can be received on this purchase order.
+          The next step is with Finance: register and approve the supplier invoice, then pay it.
+        </p>
+        <UiButton type="button" variant="secondary" @click="closeDetail">Close</UiButton>
+      </div>
+      <template v-else>
+        <h3 class="receiving-detail__subtitle">Receive stock</h3>
+        <form class="receiving-form" @submit.prevent="startReceive">
+          <div v-for="item in selected.items" :key="item.id" class="receiving-line">
+            <strong class="receiving-line__name">{{ item.sku }} — {{ item.product_name }}</strong>
+            <UiInput label="Outstanding" :model-value="item.outstanding_quantity" size="sm" disabled />
+            <UiInput
+              v-model.number="receiving[item.id].delivered_quantity"
+              type="number"
+              min="0"
+              label="Delivered"
+              size="sm"
+            />
+            <UiInput label="Accepted" :model-value="acceptedFor(receiving[item.id])" size="sm" disabled />
+            <UiInput
+              v-model.number="receiving[item.id].damaged_quantity"
+              type="number"
+              min="0"
+              :max="receiving[item.id].delivered_quantity"
+              label="Damaged"
+              size="sm"
+            />
+            <UiInput
+              v-model.number="receiving[item.id].rejected_quantity"
+              type="number"
+              min="0"
+              :max="receiving[item.id].delivered_quantity"
+              label="Rejected"
+              size="sm"
+            />
+          </div>
+          <label class="ui-field">
+            <span class="ui-field__label">Receiving notes</span>
+            <textarea
+              v-model.trim="receivingNotes"
+              class="ui-field-control"
+              rows="2"
+              maxlength="500"
+              placeholder="Optional receiving notes"
+            ></textarea>
+          </label>
+          <p v-if="!receivingValid" class="field-help">
+            Enter at least one valid delivery. Accepted units cannot exceed the outstanding quantity, and damaged plus rejected units cannot exceed delivered units.
+          </p>
+          <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+          <p v-if="message" class="success-message">{{ message }}</p>
+          <UiButton type="submit" :disabled="!receivingValid">Record receiving</UiButton>
+        </form>
+      </template>
 
       <template v-if="selected.receivings.length">
         <h3 class="receiving-detail__subtitle">Receiving history</h3>
@@ -357,6 +380,11 @@ onMounted(load)
 }
 .table-scroll {
   overflow-x: auto;
+}
+.receiving-complete {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
 }
 .receiving-form {
   display: flex;
