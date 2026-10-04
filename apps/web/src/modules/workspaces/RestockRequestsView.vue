@@ -307,4 +307,7 @@ onMounted(load)
 .restock-lines, .review-lines { display: flex; flex-direction: column; gap: var(--fm-space-2); }
 .restock-lines__row, .review-lines__row { display: flex; flex-wrap: wrap; align-items: end; gap: var(--fm-space-3); padding: var(--fm-space-3); border: 1px solid var(--fm-color-border); border-radius: var(--fm-radius-md); }
 .review-lines__label { flex: 1 1 100%; font-weight: 600; }
+.review-lines { max-height: min(40vh, 20rem); overflow-y: auto; overscroll-behavior: contain; padding-right: 0.25rem; }
+.review-lines__row { padding: var(--fm-space-2) var(--fm-space-3); }
+.review-lines__label { font-size: 0.9rem; }
 </style>
