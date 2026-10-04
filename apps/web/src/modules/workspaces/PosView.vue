@@ -40,6 +40,8 @@ const refundSubmitting = ref(false)
 const refundError = ref('')
 const refundSuccess = ref(null)
 const confirmedRefundedBySku = ref({})
+const confirmedRefundedAmountBySku = ref({})
+const RECEIPT_STORAGE_KEY = 'freshmart.pos.lastReceipt'
 const refundCancelButton = ref(null)
 const refundDialogPanel = ref(null)
 const baseTotal = computed(() => cart.value.reduce((sum, item) => sum + item.price * item.quantity, 0))
@@ -306,6 +308,51 @@ function refundedQuantityFor(item) {
   return confirmedRefundedBySku.value[item.sku] || 0
 }
 
+function refundedAmountFor(item) {
+  return confirmedRefundedAmountBySku.value[item.sku] || 0
+}
+
+const totalRefunded = computed(() => Math.round(
+  Object.values(confirmedRefundedAmountBySku.value).reduce((sum, amount) => sum + Number(amount || 0), 0) * 100
+) / 100)
+const netTotal = computed(() => Math.max(0, Math.round((Number(completedSale.value?.total || 0) - totalRefunded.value) * 100) / 100))
+
+function saveReceiptState() {
+  try {
+    if (!completedSale.value) {
+      sessionStorage.removeItem(RECEIPT_STORAGE_KEY)
+      return
+    }
+    sessionStorage.setItem(RECEIPT_STORAGE_KEY, JSON.stringify({
+      completedSale: completedSale.value,
+      refundedBySku: confirmedRefundedBySku.value,
+      refundedAmountBySku: confirmedRefundedAmountBySku.value,
+      refundSuccess: refundSuccess.value
+    }))
+  } catch {
+    // Storage can be unavailable (private mode); the receipt just will not survive a reload.
+  }
+}
+
+function restoreReceiptState() {
+  try {
+    const raw = sessionStorage.getItem(RECEIPT_STORAGE_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw)
+    const username = sessionStore.state?.user?.username
+    if (!saved?.completedSale || (username && saved.completedSale.cashier_username !== username)) {
+      sessionStorage.removeItem(RECEIPT_STORAGE_KEY)
+      return
+    }
+    completedSale.value = saved.completedSale
+    confirmedRefundedBySku.value = saved.refundedBySku || {}
+    confirmedRefundedAmountBySku.value = saved.refundedAmountBySku || {}
+    refundSuccess.value = saved.refundSuccess || null
+  } catch {
+    // Ignore unreadable saved receipt data.
+  }
+}
+
 async function openRefund(line) {
   if (!sessionStore.can('pos.refund')) return
   selectedRefundLine.value = line
@@ -329,6 +376,7 @@ function resetRefundSession() {
   resetRefundFlow()
   refundSuccess.value = null
   confirmedRefundedBySku.value = {}
+  confirmedRefundedAmountBySku.value = {}
 }
 
 function cancelRefund() {
@@ -376,8 +424,13 @@ async function confirmRefund() {
       ...confirmedRefundedBySku.value,
       [itemSku]: (confirmedRefundedBySku.value[itemSku] || 0) + Number(result.quantity_refunded)
     }
+    confirmedRefundedAmountBySku.value = {
+      ...confirmedRefundedAmountBySku.value,
+      [itemSku]: Math.round(((confirmedRefundedAmountBySku.value[itemSku] || 0) + Number(result.refund_amount)) * 100) / 100
+    }
     refundSuccess.value = result
     resetRefundFlow()
+    saveReceiptState()
   } catch (requestError) {
     refundError.value = requestError.message
     refundStep.value = 'configure'
@@ -390,6 +443,7 @@ async function newSale() {
   const refreshRequired = !productsReady.value || Boolean(productRefreshError.value)
   resetRefundSession()
   completedSale.value = null
+  saveReceiptState()
   cart.value = []
   payment.value = 'Cash'
   cashTendered.value = ''
@@ -413,6 +467,7 @@ async function checkout() {
     })
     resetRefundSession()
     completedSale.value = completedSaleSnapshot(result)
+    saveReceiptState()
     message.value = `Order ${result.order_id} completed — ${formatMoney(result.total)}`
     confirming.value = false
     cart.value = []
@@ -431,7 +486,10 @@ watch(payment, () => {
   resetQr()
 })
 
-onMounted(load)
+onMounted(() => {
+  restoreReceiptState()
+  load()
+})
 onBeforeUnmount(stopQrPolling)
 </script>
 
@@ -478,7 +536,7 @@ onBeforeUnmount(stopQrPolling)
           <div class="receipt__item-actions">
             <strong>{{ formatReceiptMoney(item.total) }}</strong>
             <div v-if="sessionStore.can('pos.refund')" class="receipt__refund">
-              <small v-if="refundedQuantityFor(item)">{{ refundedQuantityFor(item) }} of {{ item.quantity }} refunded</small>
+              <small v-if="refundedQuantityFor(item)">{{ refundedQuantityFor(item) }} of {{ item.quantity }} refunded (−{{ formatReceiptMoney(refundedAmountFor(item)) }})</small>
               <UiButton size="sm" variant="secondary" @click="openRefund(item)">Refund item</UiButton>
             </div>
           </div>
@@ -497,6 +555,10 @@ onBeforeUnmount(stopQrPolling)
           <dd>{{ formatReceiptMoney(completedSale.tax_total) }}</dd>
         </div>
         <div class="receipt__grand-total"><dt>Total</dt><dd>{{ formatReceiptMoney(completedSale.total) }}</dd></div>
+        <template v-if="totalRefunded > 0">
+          <div><dt>Refunded</dt><dd>−{{ formatReceiptMoney(totalRefunded) }}</dd></div>
+          <div class="receipt__grand-total"><dt>Net total after refund</dt><dd>{{ formatReceiptMoney(netTotal) }}</dd></div>
+        </template>
         <template v-if="completedSale.payment_method === 'Cash' && completedSale.cash_tendered != null">
           <div><dt>Cash received</dt><dd>{{ formatReceiptMoney(completedSale.cash_tendered) }}</dd></div>
           <div class="receipt__change"><dt>Change</dt><dd>{{ formatReceiptMoney(completedSale.change_due) }}</dd></div>

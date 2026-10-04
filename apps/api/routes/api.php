@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RestockRequestController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\StockReceivingController;
+use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\SupplierInvoiceController;
 use App\Http\Controllers\Api\SupplierPaymentController;
 use App\Http\Controllers\Api\SystemSettingController;
@@ -53,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/workspace/products', [BusinessController::class, 'saveProduct'])->middleware('permission:inventory.manage');
     Route::put('/workspace/products/{id}', [BusinessController::class, 'saveProduct'])->middleware('permission:inventory.manage');
     Route::post('/workspace/products/{id}/adjust', [BusinessController::class, 'adjustStock'])->middleware('permission:inventory.manage');
+    Route::post('/workspace/suppliers', [SupplierController::class, 'store'])->middleware('permission:inventory.manage');
 
     Route::get('/restock-requests', [RestockRequestController::class, 'index'])->middleware('permission:restock.request|restock.approve');
     Route::post('/restock-requests', [RestockRequestController::class, 'store'])->middleware('permission:restock.request');

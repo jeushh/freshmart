@@ -37,7 +37,7 @@ async function refresh() {
   return state.authenticated
 }
 async function login(username, password) { await api.login(username, password); return refresh() }
-async function logout() { try { await api.logout() } finally { state.authenticated = false; state.user = null; state.permissions = [] } }
+async function logout() { try { await api.logout() } finally { try { sessionStorage.removeItem('freshmart.pos.lastReceipt') } catch { /* storage unavailable */ } state.authenticated = false; state.user = null; state.permissions = [] } }
 function expire() {
   state.authenticated = false
   state.user = null

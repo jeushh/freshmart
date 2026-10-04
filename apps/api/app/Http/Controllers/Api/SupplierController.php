@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Supplier;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 
 class SupplierController extends Controller
@@ -26,6 +27,9 @@ class SupplierController extends Controller
             'status' => 'required|in:Active,Inactive',
         ]);
 
-        return response()->json(Supplier::create($data), 201);
+        $supplier = Supplier::create($data);
+        AuditLogger::record($request, 'supplier.created', 'supplier', $supplier->id);
+
+        return response()->json($supplier, 201);
     }
 }

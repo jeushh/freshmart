@@ -51,11 +51,16 @@ const blankForm = () => ({
   stock_quantity: 0,
   reorder_level: 5,
   unit: 'pc',
-  supplier_id: null,
+  supplier_id: '',
   status: 'Active'
 })
 const form = ref(blankForm())
 const saving = ref(false)
+const suppliers = ref([])
+const showNewSupplier = ref(false)
+const newSupplier = ref({ name: '', contact_person: '', phone: '', email: '' })
+const supplierSaving = ref(false)
+const supplierError = ref('')
 
 const adjustTarget = ref(null)
 const adjustQuantity = ref(0)
@@ -86,6 +91,7 @@ async function load(page_ = pagination.value.current_page) {
     rows.value = data.products.data
     pagination.value = data.products
     lowStockRows.value = data.low_stock_products
+    suppliers.value = data.suppliers || []
     movements.value = data.inventory_movements
   } catch (requestError) {
     error.value = requestError.message
@@ -94,11 +100,37 @@ async function load(page_ = pagination.value.current_page) {
   }
 }
 
+async function saveSupplier() {
+  supplierError.value = ''
+  if (!newSupplier.value.name.trim()) {
+    supplierError.value = 'Supplier name is required.'
+    return
+  }
+  supplierSaving.value = true
+  try {
+    const created = await api.post('/workspace/suppliers', {
+      name: newSupplier.value.name.trim(),
+      contact_person: newSupplier.value.contact_person.trim() || null,
+      phone: newSupplier.value.phone.trim() || null,
+      email: newSupplier.value.email.trim() || null,
+      status: 'Active'
+    })
+    suppliers.value = [...suppliers.value, created].sort((a, b) => a.name.localeCompare(b.name))
+    form.value.supplier_id = created.id
+    newSupplier.value = { name: '', contact_person: '', phone: '', email: '' }
+    showNewSupplier.value = false
+  } catch (requestError) {
+    supplierError.value = requestError.message
+  } finally {
+    supplierSaving.value = false
+  }
+}
+
 async function save() {
   saving.value = true
   error.value = ''
   try {
-    await api.post('/workspace/products', form.value)
+    await api.post('/workspace/products', { ...form.value, supplier_id: form.value.supplier_id || null })
     form.value = blankForm()
     await load(1)
   } catch (requestError) {
@@ -190,11 +222,26 @@ onMounted(() => load())
       <UiInput v-model.number="form.stock_quantity" type="number" min="0" label="Initial stock" />
       <UiInput v-model.number="form.reorder_level" type="number" min="0" label="Reorder level" required />
       <UiInput v-model="form.unit" label="Unit" required />
+      <UiSelect v-model="form.supplier_id" label="Supplier">
+        <option value="">No supplier yet</option>
+        <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option>
+      </UiSelect>
+      <UiButton type="button" variant="secondary" @click="showNewSupplier = !showNewSupplier">
+        {{ showNewSupplier ? 'Cancel new supplier' : 'New supplier' }}
+      </UiButton>
       <UiSelect v-model="form.status" label="Status">
         <option value="Active">Active</option>
         <option value="Inactive">Inactive</option>
       </UiSelect>
       <UiButton type="submit" :loading="saving" loading-label="Adding product">Add product</UiButton>
+    </form>
+    <form v-if="showNewSupplier" class="add-product-form new-supplier-form" @submit.prevent="saveSupplier">
+      <UiInput v-model="newSupplier.name" label="Supplier name" required />
+      <UiInput v-model="newSupplier.contact_person" label="Contact person" />
+      <UiInput v-model="newSupplier.phone" label="Phone" />
+      <UiInput v-model="newSupplier.email" type="email" label="Email" />
+      <UiButton type="submit" :loading="supplierSaving" loading-label="Saving supplier">Save supplier</UiButton>
+      <p v-if="supplierError" class="form-error" role="alert">{{ supplierError }}</p>
     </form>
   </section>
 
@@ -381,6 +428,11 @@ onMounted(() => load())
 }
 .add-product-card__title {
   margin: 0 0 0.75rem;
+}
+.new-supplier-form {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--fm-color-border, #ddd);
 }
 .add-product-form {
   display: flex;
