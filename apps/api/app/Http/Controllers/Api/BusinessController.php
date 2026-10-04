@@ -37,6 +37,7 @@ class BusinessController extends Controller
         return response()->json([
             'products' => $this->page($query->orderBy('products.name'), $request),
             'suppliers' => DB::table('suppliers')->where('status', 'Active')->orderBy('name')->get(),
+            'categories' => DB::table('products')->whereNotNull('category')->where('category', '!=', '')->distinct()->orderBy('category')->pluck('category'),
             'low_stock' => DB::table('products')
                 ->where('status', 'Active')
                 ->whereColumn('stock_quantity', '<=', 'reorder_level')

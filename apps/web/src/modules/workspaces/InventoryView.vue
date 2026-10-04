@@ -57,6 +57,9 @@ const blankForm = () => ({
 const form = ref(blankForm())
 const saving = ref(false)
 const suppliers = ref([])
+const serverCategories = ref([])
+const NEW_CATEGORY = '__new__'
+const newCategoryName = ref('')
 const showNewSupplier = ref(false)
 const newSupplier = ref({ name: '', contact_person: '', phone: '', email: '' })
 const supplierSaving = ref(false)
@@ -71,9 +74,10 @@ const adjustDialogPanel = ref(null)
 const adjustTriggerButton = ref(null)
 
 const categories = computed(() => {
-  const unique = new Set(rows.value.map(row => row.category).filter(Boolean))
-  return [...unique].sort()
+  const unique = new Set([...serverCategories.value, ...rows.value.map(row => row.category)].filter(Boolean))
+  return [...unique].sort((a, b) => a.localeCompare(b))
 })
+const categoryChoices = computed(() => (categories.value.includes('General') ? categories.value : ['General', ...categories.value]))
 const filteredRows = computed(() => {
   if (!categoryFilter.value) return rows.value
   return rows.value.filter(row => row.category === categoryFilter.value)
@@ -92,6 +96,7 @@ async function load(page_ = pagination.value.current_page) {
     pagination.value = data.products
     lowStockRows.value = data.low_stock_products
     suppliers.value = data.suppliers || []
+    serverCategories.value = data.categories || []
     movements.value = data.inventory_movements
   } catch (requestError) {
     error.value = requestError.message
@@ -127,11 +132,17 @@ async function saveSupplier() {
 }
 
 async function save() {
-  saving.value = true
   error.value = ''
+  const category = form.value.category === NEW_CATEGORY ? newCategoryName.value.trim() : form.value.category
+  if (!category) {
+    error.value = 'Category is required.'
+    return
+  }
+  saving.value = true
   try {
-    await api.post('/workspace/products', { ...form.value, supplier_id: form.value.supplier_id || null })
+    await api.post('/workspace/products', { ...form.value, category, supplier_id: form.value.supplier_id || null })
     form.value = blankForm()
+    newCategoryName.value = ''
     await load(1)
   } catch (requestError) {
     error.value = requestError.message
@@ -216,7 +227,11 @@ onMounted(() => load())
     <form class="add-product-form" @submit.prevent="save">
       <UiInput v-model="form.sku" label="SKU" required />
       <UiInput v-model="form.name" label="Product name" required />
-      <UiInput v-model="form.category" label="Category" required />
+      <UiSelect v-model="form.category" label="Category" required>
+        <option v-for="category in categoryChoices" :key="category" :value="category">{{ category }}</option>
+        <option :value="NEW_CATEGORY">+ New category…</option>
+      </UiSelect>
+      <UiInput v-if="form.category === NEW_CATEGORY" v-model="newCategoryName" label="New category name" required />
       <UiInput v-model.number="form.price" type="number" min="0" step=".01" label="Price" required />
       <UiInput v-model.number="form.cost_price" type="number" min="0" step=".01" label="Cost" required />
       <UiInput v-model.number="form.stock_quantity" type="number" min="0" label="Initial stock" />
